@@ -16,6 +16,9 @@ COPY . .
 # Usa cache para acelerar pnpm install
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 
+# Gera os tipos do Prisma Client antes da compilação do TypeScript
+RUN npx prisma generate --schema=apps/api/prisma/schema.prisma
+
 # Faz o build de tudo
 RUN pnpm build
 
