@@ -1,0 +1,378 @@
+// ─────────────────────────────────────────────────────────────────
+// XGO Midia Platform — Prisma Schema
+// Fonte de verdade do modelo de dados
+// ─────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// IDENTIDADE E ACESSO
+// ─────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   // bcrypt, custo 12 — NUNCA expor via API
+  role         UserRole
+  agencyId     String
+
+  agency          Agency             @relation(fields: [agencyId], references: [id])
+  clientAccess    ClientUserAccess[]
+  auditLogs       AuditLog[]
+  timelineEntries TimelineEntry[]
+  refreshTokens   RefreshToken[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // soft delete obrigatório
+
+  @@index([agencyId])
+  @@index([email])
+}
+
+enum UserRole {
+  AGENCY_ADMIN
+  AGENCY_MANAGER
+  CLIENT_VIEWER
+}
+
+model RefreshToken {
+  id         String    @id @default(uuid())
+  userId     String
+  tokenHash  String    @unique // SHA-256 do token — NUNCA armazenar o token em claro
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  userAgent  String?
+  ipAddress  String?
+
+  user User @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────
+// ESTRUTURA DE NEGÓCIO
+// ─────────────────────────────────────────────
+
+model Agency {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  logoUrl   String?
+
+  users   User[]
+  clients Client[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Client {
+  id       String @id @default(uuid())
+  agencyId String
+
+  agency Agency @relation(fields: [agencyId], references: [id])
+
+  name    String
+  slug    String  @unique // para URLs amigáveis
+  logoUrl String?
+
+  adAccounts      AdAccount[]
+  projects        Project[]
+  timelineEntries TimelineEntry[]
+  userAccess      ClientUserAccess[]
+  aiInsights      AiInsight[]
+  reports         Report[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // soft delete
+
+  @@index([agencyId])
+  @@index([slug])
+}
+
+model ClientUserAccess {
+  id       String @id @default(uuid())
+  clientId String
+  userId   String
+
+  client Client @relation(fields: [clientId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([clientId, userId])
+  @@index([userId])
+}
+
+model Project {
+  id          String  @id @default(uuid())
+  clientId    String
+  name        String
+  description String?
+
+  client     Client     @relation(fields: [clientId], references: [id])
+  strategies Strategy[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([clientId])
+}
+
+model Strategy {
+  id         String     @id @default(uuid())
+  projectId  String
+  name       String
+  funnelType FunnelType
+
+  // JSON com configuração das métricas visíveis no dashboard
+  // Ex: { visibleMetrics: ['spend', 'roas', 'cpa'], goalRoas: 3.0, maxCpa: 50.0 }
+  metricConfig Json @default("{}")
+
+  project    Project          @relation(fields: [projectId], references: [id])
+  metrics    MetricSnapshot[]
+  aiInsights AiInsight[]
+  reports    Report[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([projectId])
+}
+
+enum FunnelType {
+  WEBINAR
+  DIRECT_SALE
+  LEAD_GENERATION
+  ECOMMERCE
+  CUSTOM
+}
+
+// ─────────────────────────────────────────────
+// CONTAS DE ANÚNCIO E MÉTRICAS
+// ─────────────────────────────────────────────
+
+model AdAccount {
+  id         String   @id @default(uuid())
+  clientId   String
+  platform   Platform
+  externalId String   // ID da conta na plataforma (ex: act_123456789)
+
+  // CRÍTICO: tokens de acesso NUNCA ficam aqui — ficam no Vault
+  // Este campo é apenas a referência do caminho no Vault
+  vaultSecretPath String // ex: "secret/clients/{clientId}/meta-ads/{externalId}"
+
+  name     String
+  currency String     @default("BRL")
+  timezone String     @default("America/Sao_Paulo")
+
+  lastSyncAt DateTime?
+  syncStatus SyncStatus @default(PENDING)
+  syncError  String?    // última mensagem de erro, se houver
+
+  client  Client           @relation(fields: [clientId], references: [id])
+  metrics MetricSnapshot[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([clientId, platform, externalId])
+  @@index([clientId])
+  @@index([syncStatus])
+}
+
+enum Platform {
+  META_ADS
+  GOOGLE_ADS
+  TIKTOK_ADS
+  LINKEDIN_ADS
+}
+
+enum SyncStatus {
+  PENDING
+  SYNCING
+  SUCCESS
+  ERROR
+}
+
+// Schema unificado de métricas — todas as plataformas normalizam para este formato
+model MetricSnapshot {
+  id          String   @id @default(uuid())
+  adAccountId String
+  strategyId  String?  // opcional — pode ser associado a uma estratégia
+  date        DateTime @db.Date
+  platform    Platform
+
+  // Métricas universais
+  impressions BigInt  @default(0)
+  clicks      BigInt  @default(0)
+  spend       Decimal @db.Decimal(12, 2)
+  conversions Int     @default(0)
+  revenue     Decimal? @db.Decimal(12, 2)
+
+  // Métricas derivadas são calculadas em runtime (CTR, CPC, CPA, ROAS, CPM)
+  // não armazenadas — usar views no DB ou calcular no service
+
+  // Dados extras da plataforma (JSONB para flexibilidade)
+  rawData Json? // dados brutos da plataforma — útil para debug
+
+  adAccount AdAccount @relation(fields: [adAccountId], references: [id])
+  strategy  Strategy? @relation(fields: [strategyId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([adAccountId, date, platform])
+  @@index([adAccountId, date])
+  @@index([strategyId, date])
+}
+
+// ─────────────────────────────────────────────
+// IA, RELATÓRIOS E LINHA DO TEMPO
+// ─────────────────────────────────────────────
+
+model AiInsight {
+  id         String      @id @default(uuid())
+  clientId   String?
+  strategyId String?
+  type       InsightType
+  severity   Severity
+  title      String
+  body       String      @db.Text
+  source     InsightSource // RULES_ENGINE ou LLM
+
+  // Contexto usado para gerar o insight + tokens consumidos (para controle de custo LLM)
+  metadata Json?
+
+  readAt DateTime?
+
+  client   Client?   @relation(fields: [clientId], references: [id])
+  strategy Strategy? @relation(fields: [strategyId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([clientId, createdAt])
+  @@index([strategyId, createdAt])
+  @@index([source, severity])
+}
+
+enum InsightType {
+  ALERT      // anomalia detectada
+  SUGGESTION // oportunidade de melhoria
+  SUMMARY    // resumo de performance
+  COMPARISON // comparativo de períodos
+}
+
+enum Severity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum InsightSource {
+  RULES_ENGINE
+  LLM
+}
+
+model Report {
+  id         String       @id @default(uuid())
+  clientId   String
+  strategyId String?
+  title      String
+  type       ReportType
+  status     ReportStatus @default(PENDING)
+
+  // Referência ao arquivo no Object Storage — NUNCA URL pública permanente
+  storageKey String? // ex: "reports/{clientId}/{reportId}.pdf"
+
+  // Token para link compartilhável (expiração controlada)
+  shareToken     String?   @unique
+  shareExpiresAt DateTime?
+
+  generatedAt DateTime?
+  errorMessage String?   // mensagem de erro se status = ERROR
+
+  // Parâmetros usados para gerar o relatório
+  config Json
+
+  client   Client    @relation(fields: [clientId], references: [id])
+  strategy Strategy? @relation(fields: [strategyId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId, status])
+  @@index([shareToken])
+}
+
+enum ReportType {
+  PDF
+  PPT
+  WEB
+}
+
+enum ReportStatus {
+  PENDING
+  PROCESSING
+  DONE
+  ERROR
+}
+
+model TimelineEntry {
+  id         String            @id @default(uuid())
+  clientId   String
+  authorId   String
+  type       TimelineEntryType
+  title      String
+  body       String            @db.Text
+  occurredAt DateTime
+
+  client Client @relation(fields: [clientId], references: [id])
+  author User   @relation(fields: [authorId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([clientId, occurredAt])
+}
+
+enum TimelineEntryType {
+  ACTION       // ação executada no tráfego
+  MEETING      // reunião com o cliente
+  OPTIMIZATION // otimização de campanha
+  NOTE         // nota livre
+  ALERT        // alerta gerado pelo sistema
+}
+
+// ─────────────────────────────────────────────
+// AUDITORIA — OBRIGATÓRIO PARA DADOS SENSÍVEIS
+// ─────────────────────────────────────────────
+
+model AuditLog {
+  id           String  @id @default(uuid())
+  userId       String? // null se ação do sistema
+  action       String  // ex: "client.create", "adAccount.token.rotate"
+  resourceType String
+  resourceId   String
+  before       Json?   // estado anterior (omitir campos sensíveis)
+  after        Json?   // estado posterior (omitir campos sensíveis)
+  ipAddress    String?
+  userAgent    String?
+
+  user User? @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([resourceType, resourceId])
+  @@index([createdAt])
+}

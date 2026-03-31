@@ -1,0 +1,10 @@
+// Variáveis de ambiente para testes — sobrescrever antes de qualquer import
+process.env['NODE_ENV'] = 'test'
+process.env['DATABASE_URL'] = 'postgresql://xgo:xgo_dev_password@localhost:5432/xgo_platform_test'
+process.env['REDIS_URL'] = 'redis://localhost:6379'
+process.env['JWT_SECRET'] = 'test-jwt-secret-at-least-32-chars-long'
+process.env['JWT_ACCESS_TTL'] = '15m'
+process.env['JWT_REFRESH_TTL'] = '7d'
+process.env['VAULT_ADDR'] = 'http://localhost:8200'
+process.env['VAULT_TOKEN'] = 'root'
+process.env['COOKIE_SECRET'] = 'test-cookie-secret'
