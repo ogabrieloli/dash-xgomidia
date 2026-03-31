@@ -16,6 +16,7 @@ import { QUEUES, type AiInsightsJob } from '@xgo/shared-types'
 import { calculateDerivedMetrics } from '@xgo/metrics-schema'
 import { evaluateRules, type RuleThresholds } from './rules/index.js'
 import { processLlmInsightJob } from './llm/worker.js'
+import { Redis } from 'ioredis'
 
 const log = pino({ level: process.env['LOG_LEVEL'] ?? 'info' })
 const db = new PrismaClient()
@@ -168,7 +169,7 @@ export function createWorker() {
     QUEUES.AI_INSIGHTS,
     processInsightsJob,
     {
-      connection: { url: process.env['REDIS_URL'] ?? 'redis://localhost:6379' },
+      connection: new Redis(process.env['REDIS_URL'] ?? 'redis://localhost:6379', { maxRetriesPerRequest: null }),
       concurrency: 5,
     },
   )

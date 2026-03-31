@@ -21,7 +21,9 @@ import { QUEUES, type MetaAdsSyncJob, type AiInsightsJob } from '@xgo/shared-typ
 const log = pino({ level: process.env['LOG_LEVEL'] ?? 'info' })
 const db = new PrismaClient()
 
-const redisConnection = { url: process.env['REDIS_URL'] ?? 'redis://localhost:6379' }
+import { Redis } from 'ioredis'
+
+const redisConnection = new Redis(process.env['REDIS_URL'] ?? 'redis://localhost:6379', { maxRetriesPerRequest: null })
 const metaQueue = new Queue<MetaAdsSyncJob>(QUEUES.META_ADS_SYNC, { connection: redisConnection })
 const insightsQueue = new Queue<AiInsightsJob>(QUEUES.AI_INSIGHTS, { connection: redisConnection })
 

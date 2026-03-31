@@ -11,6 +11,7 @@ import { Resend } from 'resend'
 import pino from 'pino'
 import { QUEUES, type NotificationJob } from '@xgo/shared-types'
 import { reportReadyTemplate } from './templates.js'
+import { Redis } from 'ioredis'
 
 const log = pino({ level: process.env['LOG_LEVEL'] ?? 'info' })
 const resend = new Resend(process.env['RESEND_API_KEY'])
@@ -83,7 +84,7 @@ export function createWorker() {
     QUEUES.NOTIFICATIONS,
     processNotificationJob,
     {
-      connection: { url: process.env['REDIS_URL'] ?? 'redis://localhost:6379' },
+      connection: new Redis(process.env['REDIS_URL'] ?? 'redis://localhost:6379', { maxRetriesPerRequest: null }),
       concurrency: 10,
     },
   )

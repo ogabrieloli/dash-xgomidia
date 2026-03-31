@@ -12,6 +12,7 @@
   "dependencies": {
     "@xgo/shared-types": "workspace:*",
     "bullmq": "^5.10.0",
+    "ioredis": "^5.10.1",
     "pino": "^9.3.0",
     "resend": "^3.3.0"
   },
