@@ -53,9 +53,9 @@ export async function processLlmInsightJob(job: Job<AiInsightsJob>): Promise<voi
     }),
     strategyId
       ? db.strategy.findUnique({
-          where: { id: strategyId },
-          select: { name: true },
-        })
+        where: { id: strategyId },
+        select: { name: true },
+      })
       : Promise.resolve(null),
   ])
 
@@ -82,7 +82,7 @@ export async function processLlmInsightJob(job: Job<AiInsightsJob>): Promise<voi
   // Agregar snapshots de todas as contas
   const snapshots = await db.metricSnapshot.findMany({
     where: {
-      adAccountId: { in: accounts.map((a) => a.id) },
+      adAccountId: { in: accounts.map((a: any) => a.id) },
       date: { gte: from, lte: today_ },
     },
   })
@@ -92,11 +92,11 @@ export async function processLlmInsightJob(job: Job<AiInsightsJob>): Promise<voi
     return
   }
 
-  const totImp = snapshots.reduce((s, r) => s + Number(r.impressions), 0)
-  const totClicks = snapshots.reduce((s, r) => s + Number(r.clicks), 0)
-  const totSpend = snapshots.reduce((s, r) => s + Number(r.spend), 0)
-  const totConv = snapshots.reduce((s, r) => s + r.conversions, 0)
-  const totRev = snapshots.reduce((s, r) => s + Number(r.revenue ?? 0), 0)
+  const totImp = snapshots.reduce((s: number, r: any) => s + Number(r.impressions), 0)
+  const totClicks = snapshots.reduce((s: number, r: any) => s + Number(r.clicks), 0)
+  const totSpend = snapshots.reduce((s: number, r: any) => s + Number(r.spend), 0)
+  const totConv = snapshots.reduce((s: number, r: any) => s + r.conversions, 0)
+  const totRev = snapshots.reduce((s: number, r: any) => s + Number(r.revenue ?? 0), 0)
 
   const derived = calculateDerivedMetrics({
     date: '',
@@ -117,17 +117,17 @@ export async function processLlmInsightJob(job: Job<AiInsightsJob>): Promise<voi
     const prevFrom = subDays(from, periodDays)
     const prevSnapshots = await db.metricSnapshot.findMany({
       where: {
-        adAccountId: { in: accounts.map((a) => a.id) },
+        adAccountId: { in: accounts.map((a: any) => a.id) },
         date: { gte: prevFrom, lte: from },
       },
     })
 
     if (prevSnapshots.length > 0) {
-      const pSpend = prevSnapshots.reduce((s, r) => s + Number(r.spend), 0)
-      const pImp = prevSnapshots.reduce((s, r) => s + Number(r.impressions), 0)
-      const pClicks = prevSnapshots.reduce((s, r) => s + Number(r.clicks), 0)
-      const pConv = prevSnapshots.reduce((s, r) => s + r.conversions, 0)
-      const pRev = prevSnapshots.reduce((s, r) => s + Number(r.revenue ?? 0), 0)
+      const pSpend = prevSnapshots.reduce((s: number, r: any) => s + Number(r.spend), 0)
+      const pImp = prevSnapshots.reduce((s: number, r: any) => s + Number(r.impressions), 0)
+      const pClicks = prevSnapshots.reduce((s: number, r: any) => s + Number(r.clicks), 0)
+      const pConv = prevSnapshots.reduce((s: number, r: any) => s + r.conversions, 0)
+      const pRev = prevSnapshots.reduce((s: number, r: any) => s + Number(r.revenue ?? 0), 0)
       const pDerived = calculateDerivedMetrics({
         date: '',
         platform: 'META_ADS',

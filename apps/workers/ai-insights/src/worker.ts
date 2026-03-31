@@ -78,11 +78,11 @@ async function processInsightsJob(job: Job<AiInsightsJob>): Promise<void> {
     if (snapshots.length === 0) continue
 
     // Calcular totais
-    const totImp = snapshots.reduce((s, r) => s + Number(r.impressions), 0)
-    const totClicks = snapshots.reduce((s, r) => s + Number(r.clicks), 0)
-    const totSpend = snapshots.reduce((s, r) => s + Number(r.spend), 0)
-    const totConv = snapshots.reduce((s, r) => s + r.conversions, 0)
-    const totRev = snapshots.reduce((s, r) => s + Number(r.revenue ?? 0), 0)
+    const totImp = snapshots.reduce((s: number, r: any) => s + Number(r.impressions), 0)
+    const totClicks = snapshots.reduce((s: number, r: any) => s + Number(r.clicks), 0)
+    const totSpend = snapshots.reduce((s: number, r: any) => s + Number(r.spend), 0)
+    const totConv = snapshots.reduce((s: number, r: any) => s + r.conversions, 0)
+    const totRev = snapshots.reduce((s: number, r: any) => s + Number(r.revenue ?? 0), 0)
 
     const derived = calculateDerivedMetrics({
       date: '',
