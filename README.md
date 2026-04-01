@@ -83,3 +83,5 @@ pnpm test             # Testes
 ## Documentação
 
 Ver [CLAUDE (2).md](./CLAUDE%20(2).md) para a arquitetura completa, modelo de dados, regras de segurança e roadmap.
+
+
