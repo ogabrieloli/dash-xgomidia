@@ -45,7 +45,8 @@ export const registerVault = fp(async (app: FastifyInstance) => {
 // ─────────────────────────────────────────────
 
 export function buildVaultPath(clientId: string, platform: Platform, externalId: string): string {
-  return `secret/clients/${clientId}/${platform.toLowerCase()}/${externalId}`
+  // Para Vault KV v2 (padrão em novas instalações), o path de escrita/leitura precisa do prefixo /data/
+  return `secret/data/clients/${clientId}/${platform.toLowerCase()}/${externalId}`
 }
 
 export async function storeAdAccountToken(
@@ -58,9 +59,11 @@ export async function storeAdAccountToken(
   const path = buildVaultPath(clientId, platform, externalId)
 
   await vault.write(path, {
-    access_token: tokens.accessToken,
-    refresh_token: tokens.refreshToken ?? null,
-    expires_at: tokens.expiresAt.toISOString(),
+    data: {
+      access_token: tokens.accessToken,
+      refresh_token: tokens.refreshToken ?? null,
+      expires_at: tokens.expiresAt.toISOString(),
+    },
   })
 
   // Retornar apenas o path — que vai para o banco
@@ -72,7 +75,8 @@ export async function getAdAccountToken(
   vaultSecretPath: string,
 ): Promise<StoredTokens> {
   const result = await vault.read(vaultSecretPath)
-  return result.data as unknown as StoredTokens
+  // No KV v2, os dados reais ficam dentro de result.data.data
+  return result.data.data as unknown as StoredTokens
 }
 
 export async function revokeAdAccountToken(
