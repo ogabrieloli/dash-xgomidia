@@ -10,6 +10,7 @@ import {
   BarChart3,
   FileText,
   LogOut,
+  Loader2,
 } from 'lucide-react'
 
 const navItems = [
@@ -20,8 +21,16 @@ const navItems = [
 ]
 
 export default function AgencyLayout({ children }: { children: React.ReactNode }) {
-  const { user, logout } = useAuth()
+  const { user, logout, isInitializing } = useAuth()
   const pathname = usePathname()
+
+  if (isInitializing) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
 
   if (!user) return null // useAuth redireciona
 
