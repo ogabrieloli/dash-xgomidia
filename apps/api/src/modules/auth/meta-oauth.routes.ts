@@ -1,31 +1,12 @@
 /**
  * Rotas de OAuth do Meta Ads.
- *
- * Fluxo:
- *  1. GET /auth/meta/connect?clientId=
- *     → retorna a URL do dialog OAuth do Meta (frontend faz o redirect)
- *
- *  2. GET /auth/meta/callback?code=&state=
- *     → troca o code por tokens
- *     → busca contas de anúncio disponíveis
- *     → armazena token no Vault (path temporário)
- *     → cria PendingMetaConnection no banco
- *     → redireciona para o front-end com ?meta_pending=<id>
- *
- *  3. GET /auth/meta/pending/:id
- *     → retorna a lista de contas disponíveis para seleção
- *
- *  4. POST /auth/meta/pending/:id/confirm
- *     → recebe selectedExternalIds
- *     → cria AdAccount para cada selecionada
- *     → limpa o pending e o token temporário do Vault
  */
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { ZodError } from 'zod'
+import { randomUUID } from 'node:crypto'
 import {
   storeAdAccountToken,
-  buildVaultPath,
   getAdAccountToken,
   revokeAdAccountToken,
 } from '../../plugins/vault.js'
@@ -70,7 +51,7 @@ interface MetaAdAccountsResponse {
 }
 
 function encodeState(clientId: string, userId: string): string {
-  const payload = JSON.stringify({ clientId, userId, nonce: crypto.randomUUID() })
+  const payload = JSON.stringify({ clientId, userId, nonce: randomUUID() })
   return Buffer.from(payload).toString('base64url')
 }
 
@@ -100,13 +81,11 @@ export async function metaOAuthRoutes(app: FastifyInstance) {
 
   // ─────────────────────────────────────────────
   // GET /auth/meta/connect?clientId=
-  // Inicia o fluxo OAuth retornando a URL para o Meta
   // ─────────────────────────────────────────────
   app.get('/connect', {
     preHandler: [authenticate, requireRole('AGENCY_ADMIN', 'AGENCY_MANAGER')],
   }, async (request, reply) => {
     const query = ConnectQuerySchema.parse(request.query)
-
     const appId = process.env['META_APP_ID']
     const redirectUri = process.env['META_REDIRECT_URI']
 
@@ -115,7 +94,6 @@ export async function metaOAuthRoutes(app: FastifyInstance) {
     }
 
     const state = encodeState(query.clientId, request.user.sub)
-
     const params = new URLSearchParams({
       client_id: appId,
       redirect_uri: redirectUri,
@@ -129,7 +107,6 @@ export async function metaOAuthRoutes(app: FastifyInstance) {
 
   // ─────────────────────────────────────────────
   // GET /auth/meta/callback?code=&state=
-  // Callback do Meta — cria PendingMetaConnection e redireciona
   // ─────────────────────────────────────────────
   app.get('/callback', async (request, reply) => {
     const query = CallbackQuerySchema.parse(request.query)
@@ -158,191 +135,126 @@ export async function metaOAuthRoutes(app: FastifyInstance) {
       return reply.redirect(`${frontEndUrl}/clients?error=invalid_state`)
     }
 
-    // 1. Trocar o code pelo access_token
-    const tokenParams = new URLSearchParams({
-      client_id: appId,
-      client_secret: appSecret,
-      redirect_uri: redirectUri,
-      code: query.code,
-    })
-
+    // 1. Trocar code por token
     let tokenData: MetaTokenResponse
     try {
-      const tokenRes = await fetch(
-        `${META_GRAPH_URL}/oauth/access_token?${tokenParams.toString()}`,
-      )
+      const tokenParams = new URLSearchParams({
+        client_id: appId,
+        client_secret: appSecret,
+        redirect_uri: redirectUri,
+        code: query.code!,
+      })
+      const tokenRes = await fetch(`${META_GRAPH_URL}/oauth/access_token?${tokenParams.toString()}`)
       tokenData = await tokenRes.json() as MetaTokenResponse
-
-      if (!tokenData.access_token) {
-        throw new Error('Token não retornado pelo Meta')
-      }
+      if (!tokenData.access_token) throw new Error('Token não retornado')
     } catch (err) {
-      app.log.error({ err }, 'Erro ao trocar code por token Meta Ads')
-      return reply.redirect(`${frontEndUrl}/clients/${clientId}?error=meta_token_exchange_failed`)
+      app.log.error({ err }, 'Erro no token exchange do Meta')
+      return reply.redirect(`${frontEndUrl}/clients/${clientId}/platforms/meta?error=meta_token_failed`)
     }
 
-    // 2. Buscar contas de anúncio disponíveis
+    // 2. Buscar contas
     let adAccounts: MetaAdAccount[]
     try {
       const accountsRes = await fetch(
         `${META_GRAPH_URL}/me/adaccounts?fields=id,name,currency,timezone_name,account_status&access_token=${tokenData.access_token}`,
       )
       const accountsData = await accountsRes.json() as MetaAdAccountsResponse
-      // Filtrar apenas contas ativas (status 1)
-      adAccounts = (accountsData.data ?? []).filter((a) => a.account_status === 1)
+      adAccounts = (accountsData.data ?? []).filter(acc => acc.account_status === 1)
     } catch (err) {
-      app.log.error({ err }, 'Erro ao buscar ad accounts do Meta')
-      return reply.redirect(`${frontEndUrl}/clients/${clientId}?error=meta_accounts_fetch_failed`)
+      app.log.error({ err }, 'Erro ao buscar contas do Meta')
+      return reply.redirect(`${frontEndUrl}/clients/${clientId}/platforms/meta?error=meta_fetch_failed`)
     }
 
-    if (adAccounts.length === 0) {
-      return reply.redirect(`${frontEndUrl}/clients/${clientId}?error=meta_no_active_accounts`)
-    }
-
-    // 3. Gerar ID único para o pending e armazenar token no Vault (path temporário)
-    const pendingId = crypto.randomUUID()
-    const tempVaultPath = buildVaultPath(clientId, 'META_ADS', `pending-${pendingId}`)
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000) // 15 minutos
-
+    // 3. Criar Pending
     try {
-      await storeAdAccountToken(app.vault, clientId, 'META_ADS', `pending-${pendingId}`, {
-        accessToken: tokenData.access_token,
-        expiresAt,
-      })
-    } catch (err) {
-      app.log.error({ err }, 'Erro ao armazenar token temporário no Vault')
-      return reply.redirect(`${frontEndUrl}/clients/${clientId}?error=meta_processing_failed`)
-    }
+      const pendingId = randomUUID()
+      const tempVaultPath = `secret/data/temp/meta/${pendingId}`
 
-    // 4. Salvar lista de contas no banco (sem criar AdAccount ainda)
-    try {
-      await app.db.pendingMetaConnection.create({
+      await (app.db as any).pendingMetaConnection.create({
         data: {
           id: pendingId,
           clientId,
           userId,
+          accounts: adAccounts as any,
           tempVaultPath,
-          accounts: adAccounts as unknown as object[],
-          expiresAt,
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
         },
       })
+
+      await app.vault.write(tempVaultPath, {
+        data: {
+          accessToken: tokenData.access_token,
+          expiresAt: tokenData.expires_in
+            ? new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
+            : new Date(Date.now() + 60 * 24 * 3600 * 1000).toISOString()
+        }
+      })
+
+      return reply.redirect(`${frontEndUrl}/clients/${clientId}?meta_pending=${pendingId}`)
     } catch (err) {
-      app.log.error({ err }, 'Erro ao criar PendingMetaConnection')
-      // Limpar o vault path temporário
-      await revokeAdAccountToken(app.vault, tempVaultPath).catch(() => null)
-      return reply.redirect(`${frontEndUrl}/clients/${clientId}?error=meta_processing_failed`)
+      app.log.error({ err }, 'Erro ao salvar conexão pendente')
+      return reply.redirect(`${frontEndUrl}/clients/${clientId}/platforms/meta?error=meta_save_failed`)
     }
-
-    app.log.info({ clientId, pendingId, accountCount: adAccounts.length }, 'Meta OAuth pendente criado')
-
-    return reply.redirect(`${frontEndUrl}/clients/${clientId}?meta_pending=${pendingId}`)
   })
 
   // ─────────────────────────────────────────────
   // GET /auth/meta/pending/:id
-  // Retorna a lista de contas disponíveis para seleção
   // ─────────────────────────────────────────────
-  app.get('/pending/:id', async (request, reply) => {
+  app.get('/pending/:id', {
+    preHandler: [authenticate],
+  }, async (request, reply) => {
     const { id } = request.params as { id: string }
+    const pending = await (app.db as any).pendingMetaConnection.findUnique({ where: { id } })
 
-    const pending = await app.db.pendingMetaConnection.findUnique({ where: { id } })
-
-    if (!pending) {
-      return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Solicitação não encontrada ou expirada' } })
+    if (!pending || pending.expiresAt < new Date()) {
+      throw new AppError('Solicitação expirada ou não encontrada', 404, 'NOT_FOUND')
     }
 
-    if (pending.expiresAt < new Date()) {
-      await app.db.pendingMetaConnection.delete({ where: { id } }).catch(() => null)
-      return reply.status(410).send({ error: { code: 'EXPIRED', message: 'Solicitação expirada. Conecte novamente.' } })
-    }
-
-    return reply.send({
-      data: {
-        clientId: pending.clientId,
-        accounts: pending.accounts,
-      },
-    })
+    return { data: { clientId: pending.clientId, accounts: pending.accounts } }
   })
 
   // ─────────────────────────────────────────────
   // POST /auth/meta/pending/:id/confirm
-  // Cria AdAccount para as contas selecionadas
   // ─────────────────────────────────────────────
   app.post('/pending/:id/confirm', {
     preHandler: [authenticate, requireRole('AGENCY_ADMIN', 'AGENCY_MANAGER')],
   }, async (request, reply) => {
     const { id } = request.params as { id: string }
     const body = ConfirmBodySchema.parse(request.body)
+    const pending = await (app.db as any).pendingMetaConnection.findUnique({ where: { id } })
 
-    const pending = await app.db.pendingMetaConnection.findUnique({ where: { id } })
-
-    if (!pending) {
-      throw new AppError('Solicitação não encontrada ou expirada', 404, 'NOT_FOUND')
+    if (!pending || pending.expiresAt < new Date()) {
+      throw new AppError('Solicitação expirada', 410, 'EXPIRED')
     }
 
-    if (pending.expiresAt < new Date()) {
-      await app.db.pendingMetaConnection.delete({ where: { id } }).catch(() => null)
-      throw new AppError('Solicitação expirada. Conecte novamente.', 410, 'EXPIRED')
-    }
-
-    if (pending.userId !== request.user.sub) {
-      throw new AppError('Acesso não autorizado', 403, 'FORBIDDEN')
-    }
-
-    // Ler token do path temporário do Vault
-    let storedTokens: { access_token: string; expires_at: string }
-    try {
-      storedTokens = await getAdAccountToken(app.vault, pending.tempVaultPath) as { access_token: string; expires_at: string }
-    } catch (err) {
-      app.log.error({ err }, 'Erro ao ler token temporário do Vault')
-      throw new AppError('Token temporário inválido ou expirado', 410, 'EXPIRED')
-    }
-
-    const accounts = pending.accounts as unknown as MetaAdAccount[]
-    const selectedAccounts = accounts.filter((a) => body.selectedExternalIds.includes(a.id))
+    const vaultRes = await app.vault.read(pending.tempVaultPath)
+    const tokenData = vaultRes.data.data as { accessToken: string; expiresAt: string }
+    const allAccounts = pending.accounts as MetaAdAccount[]
+    const selectedAccounts = allAccounts.filter(a => body.selectedExternalIds.includes(a.id))
 
     const adAccountsService = new AdAccountsService(app.db)
     let connectedCount = 0
 
-    for (const account of selectedAccounts) {
-      const expiresAt = new Date(storedTokens.expires_at)
+    for (const acc of selectedAccounts) {
+      const vaultPath = await storeAdAccountToken(app.vault, pending.clientId, 'META_ADS', acc.id, {
+        accessToken: tokenData.accessToken,
+        expiresAt: new Date(tokenData.expiresAt),
+      })
 
-      try {
-        // Armazenar token no Vault sob o path permanente da conta
-        const vaultPath = await storeAdAccountToken(
-          app.vault,
-          pending.clientId,
-          'META_ADS',
-          account.id,
-          { accessToken: storedTokens.access_token, expiresAt },
-        )
-
-        await adAccountsService.create(
-          {
-            platform: 'META_ADS',
-            externalId: account.id,
-            name: account.name,
-            vaultSecretPath: vaultPath,
-            currency: account.currency,
-            timezone: account.timezone_name,
-          },
-          pending.clientId,
-          pending.userId,
-        )
-        connectedCount++
-      } catch (err) {
-        app.log.warn({ err, externalId: account.id }, 'Conta já existe ou erro ao criar AdAccount')
-      }
+      await adAccountsService.create({
+        platform: 'META_ADS',
+        externalId: acc.id,
+        name: acc.name,
+        vaultSecretPath: vaultPath,
+        currency: acc.currency,
+        timezone: acc.timezone_name,
+      }, pending.clientId, pending.userId).catch(() => null)
+      connectedCount++
     }
 
-    // Limpar pending e token temporário do Vault
-    await Promise.all([
-      app.db.pendingMetaConnection.delete({ where: { id } }).catch(() => null),
-      revokeAdAccountToken(app.vault, pending.tempVaultPath).catch(() => null),
-    ])
+    await (app.db as any).pendingMetaConnection.delete({ where: { id } }).catch(() => null)
+    await revokeAdAccountToken(app.vault, pending.tempVaultPath).catch(() => null)
 
-    app.log.info({ clientId: pending.clientId, connectedCount }, 'Meta Ads contas confirmadas')
-
-    return reply.send({ data: { connectedCount } })
+    return { data: { connectedCount } }
   })
 }
