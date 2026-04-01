@@ -186,45 +186,51 @@ export async function metaOAuthRoutes(app: FastifyInstance) {
     const adAccountsService = new AdAccountsService(app.db)
     let connectedCount = 0
 
-    for (const account of adAccounts) {
-      // Apenas contas ativas (account_status === 1)
-      if (account.account_status !== 1) continue
+    try {
+      for (const account of adAccounts) {
+        // Apenas contas ativas (account_status === 1)
+        if (account.account_status !== 1) continue
 
-      const externalId = account.id // ex: "act_123456789"
-      const expiresAt = tokenData.expires_in
-        ? new Date(Date.now() + tokenData.expires_in * 1000)
-        : new Date(Date.now() + 60 * 24 * 3600 * 1000) // 60 dias de fallback
+        const externalId = account.id // ex: "act_123456789"
+        const expiresAt = tokenData.expires_in
+          ? new Date(Date.now() + tokenData.expires_in * 1000)
+          : new Date(Date.now() + 60 * 24 * 3600 * 1000) // 60 dias de fallback
 
-      // 3. Armazenar token no Vault — NUNCA no banco
-      const vaultPath = await storeAdAccountToken(
-        app.vault,
-        clientId,
-        'META_ADS',
-        externalId,
-        {
-          accessToken: tokenData.access_token,
-          expiresAt,
-        },
-      )
-
-      // 4. Criar ou atualizar AdAccount no banco (apenas com o path do Vault)
-      try {
-        await adAccountsService.create(
-          {
-            platform: 'META_ADS',
-            externalId,
-            name: account.name,
-            vaultSecretPath: vaultPath,
-            currency: account.currency,
-            timezone: account.timezone_name,
-          },
+        // 3. Armazenar token no Vault — NUNCA no banco
+        const vaultPath = await storeAdAccountToken(
+          app.vault,
           clientId,
-          userId,
+          'META_ADS',
+          externalId,
+          {
+            accessToken: tokenData.access_token,
+            expiresAt,
+          },
         )
-        connectedCount++
-      } catch {
-        // Conta já conectada — ignorar conflito de unique constraint
+
+        // 4. Criar ou atualizar AdAccount no banco (apenas com o path do Vault)
+        try {
+          await adAccountsService.create(
+            {
+              platform: 'META_ADS',
+              externalId,
+              name: account.name,
+              vaultSecretPath: vaultPath,
+              currency: account.currency,
+              timezone: account.timezone_name,
+            },
+            clientId,
+            userId,
+          )
+          connectedCount++
+        } catch (dbErr) {
+          // Conta já conectada — ignorar conflito de unique constraint
+          app.log.warn({ dbErr, externalId }, 'Conta de anúncio já existe ou falha na criação')
+        }
       }
+    } catch (err) {
+      app.log.error({ err }, 'Falha crítica ao processar contas do Meta/Vault')
+      return reply.redirect(`${frontEndUrl}/clients/${clientId}?error=meta_processing_failed`)
     }
 
     app.log.info({ clientId, connectedCount }, 'Meta Ads OAuth concluído')
