@@ -5,6 +5,7 @@ import cookie from '@fastify/cookie'
 import rateLimit from '@fastify/rate-limit'
 import { registerDatabase } from './database.js'
 import { registerRedis } from './redis.js'
+import { registerVault } from './vault.js'
 
 export async function registerPlugins(app: FastifyInstance) {
   // Segurança
@@ -34,7 +35,8 @@ export async function registerPlugins(app: FastifyInstance) {
     keyGenerator: (req) => req.ip,
   })
 
-  // Banco de dados e cache
+  // Banco de dados, cache e secrets
   await registerDatabase(app)
   await registerRedis(app)
+  await app.register(registerVault)
 }
