@@ -66,9 +66,13 @@ export function PlatformsSection({ clientId }: { clientId: string }) {
     },
   })
 
-  const handleConnectMeta = () => {
-    const apiBase = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001'
-    window.location.href = `${apiBase}/auth/meta/connect?clientId=${clientId}`
+  const handleConnectMeta = async () => {
+    try {
+      const res = await api.get<{ url: string }>('/auth/meta/connect', { params: { clientId } })
+      window.location.href = res.data.url
+    } catch {
+      alert('Erro ao iniciar conexão com Meta Ads. Tente novamente.')
+    }
   }
 
   const metaAccounts = accounts?.filter((a) => a.platform === 'META_ADS') ?? []

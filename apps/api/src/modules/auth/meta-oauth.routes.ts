@@ -112,7 +112,7 @@ export async function metaOAuthRoutes(app: FastifyInstance) {
       state,
     })
 
-    return reply.redirect(`${META_OAUTH_URL}?${params.toString()}`)
+    return reply.send({ url: `${META_OAUTH_URL}?${params.toString()}` })
   })
 
   // ─────────────────────────────────────────────
