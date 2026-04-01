@@ -222,6 +222,21 @@ model StrategyCampaign {
   @@index([adAccountId])
 }
 
+// Conexão OAuth pendente — aguardando seleção de contas pelo usuário
+// Expira em 15 minutos; token armazenado no Vault sob path temporário
+model PendingMetaConnection {
+  id            String   @id @default(uuid())
+  clientId      String
+  userId        String
+  tempVaultPath String   // path no Vault com o access_token temporário
+  accounts      Json     // MetaAdAccount[] { id, name, currency, timezone_name, account_status }
+  expiresAt     DateTime
+
+  createdAt DateTime @default(now())
+
+  @@index([clientId])
+}
+
 enum Platform {
   META_ADS
   GOOGLE_ADS

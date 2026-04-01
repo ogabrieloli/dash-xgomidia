@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -57,6 +57,8 @@ const FUNNEL_LABELS: Record<string, string> = {
 
 export default function ClientDetailPage() {
   const { clientId } = useParams<{ clientId: string }>()
+  const searchParams = useSearchParams()
+  const metaPendingId = searchParams.get('meta_pending')
   const queryClient = useQueryClient()
   const [showProjectForm, setShowProjectForm] = useState(false)
   const [expandedProject, setExpandedProject] = useState<string | null>(null)
@@ -292,7 +294,7 @@ export default function ClientDetailPage() {
       )}
 
       {/* Plataformas */}
-      <PlatformsSection clientId={clientId} />
+      <PlatformsSection clientId={clientId} pendingId={metaPendingId} />
 
       {/* Insights automáticos */}
       <InsightsPanel clientId={clientId} />
