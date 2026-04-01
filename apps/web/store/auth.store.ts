@@ -13,9 +13,11 @@ interface AuthState {
   user: AuthUser | null
   accessToken: string | null
   isAuthenticated: boolean
+  _hasHydrated: boolean
   setAuth: (user: AuthUser, token: string) => void
   setToken: (token: string) => void
   logout: () => void
+  setHasHydrated: (value: boolean) => void
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -24,6 +26,7 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       accessToken: null,
       isAuthenticated: false,
+      _hasHydrated: false,
 
       setAuth: (user, accessToken) =>
         set({ user, accessToken, isAuthenticated: true }),
@@ -33,14 +36,20 @@ export const useAuthStore = create<AuthState>()(
 
       logout: () =>
         set({ user: null, accessToken: null, isAuthenticated: false }),
+
+      setHasHydrated: (value) =>
+        set({ _hasHydrated: value }),
     }),
     {
       name: 'xgo-auth',
-      // Só persistir user e isAuthenticated — não o token (ele expira em 15min)
+      // Só persistir user e isAuthenticated — token expira em 15min, não persistir
       partialize: (state) => ({
         user: state.user,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true)
+      },
     },
   ),
 )
