@@ -49,6 +49,8 @@ interface TopClient {
 interface AgencySummary {
   totals: Totals
   topClients: TopClient[]
+  totalClients: number
+  averageInvestment: number
 }
 
 export default function DashboardPage() {
@@ -87,6 +89,27 @@ export default function DashboardPage() {
           <p className="text-sm text-muted-foreground mt-1">Visão consolidada da agência</p>
         </div>
         <DateRangePicker value={dateRange} onChange={setDateRange} />
+      </div>
+
+      {/* KPI Cards — Agency Level */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+        <KpiCard
+          label="Clientes Ativos"
+          value={data ? String(data.totalClients) : '—'}
+          loading={isLoading}
+        />
+        <KpiCard
+          label="Média de Investimento"
+          value={data ? formatCurrency(data.averageInvestment) : '—'}
+          sub="Por cliente no período"
+          loading={isLoading}
+        />
+        <KpiCard
+          label="ROAS Médio"
+          value={totals ? `${totals.derived.roas.toFixed(2)}x` : '—'}
+          sub="Retorno sobre investimento"
+          loading={isLoading}
+        />
       </div>
 
       {/* KPI Cards */}

@@ -54,6 +54,8 @@ export interface TopClient {
 export interface AgencySummaryResult {
   totals: MetricTotals & { derived: MetricTotals['derived'] }
   topClients: TopClient[]
+  totalClients: number
+  averageInvestment: number // totalSpend / totalClients
 }
 
 function computeDerived(
@@ -193,6 +195,8 @@ export class MetricsService {
       return {
         totals: buildTotals([]),
         topClients: [],
+        totalClients: clients.length,
+        averageInvestment: 0,
       }
     }
 
@@ -249,6 +253,49 @@ export class MetricsService {
       }))
       .sort((a, b) => b.spend.toNumber() - a.spend.toNumber())
 
-    return { totals, topClients }
+    const totalClients = clients.length
+    const averageInvestment = totalClients > 0
+      ? totals.spend.toNumber() / totalClients
+      : 0
+
+    return { totals, topClients, totalClients, averageInvestment }
+  }
+
+  /**
+   * Busca métricas de uma estratégia.
+   * Se a estratégia tiver campanhas vinculadas, filtra por `externalCampaignId`.
+   * Caso contrário, retorna todas as métricas das contas do cliente.
+   */
+  async getByStrategy(strategyId: string, clientId: string, dateRange: DateRange): Promise<MetricsResult> {
+    // Campanhas vinculadas à estratégia
+    const linkedCampaigns = await this.db.strategyCampaign.findMany({
+      where: { strategyId },
+      select: { externalId: true, adAccountId: true },
+    })
+
+    const accounts = await this.db.adAccount.findMany({
+      where: { clientId },
+      select: { id: true },
+    })
+
+    const accountIds = accounts.map((a) => a.id)
+    if (accountIds.length === 0) {
+      return { rows: [], totals: buildTotals([]) }
+    }
+
+    const where = linkedCampaigns.length > 0
+      ? {
+          adAccountId: { in: linkedCampaigns.map((c) => c.adAccountId) },
+          externalCampaignId: { in: linkedCampaigns.map((c) => c.externalId) },
+          date: { gte: new Date(dateRange.from), lte: new Date(dateRange.to) },
+        }
+      : {
+          adAccountId: { in: accountIds },
+          date: { gte: new Date(dateRange.from), lte: new Date(dateRange.to) },
+        }
+
+    const snapshots = await this.db.metricSnapshot.findMany({ where, orderBy: { date: 'asc' } })
+    const rows = snapshotsToRows(snapshots)
+    return { rows, totals: buildTotals(rows) }
   }
 }

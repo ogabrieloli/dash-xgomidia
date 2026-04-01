@@ -6,11 +6,21 @@ interface CreateClientInput {
   name: string
   slug: string
   logoUrl?: string | undefined
+  operation?: string | undefined
+  alreadyInvesting?: boolean | undefined
+  initialInvestment?: number | undefined
+  reportedRevenue?: number | undefined
+  notes?: string | undefined
 }
 
 interface UpdateClientInput {
   name?: string | undefined
   logoUrl?: string | null | undefined
+  operation?: string | null | undefined
+  alreadyInvesting?: boolean | undefined
+  initialInvestment?: number | null | undefined
+  reportedRevenue?: number | null | undefined
+  notes?: string | null | undefined
 }
 
 interface ListOptions {
@@ -53,6 +63,11 @@ export class ClientsService {
         name: input.name,
         slug: input.slug,
         logoUrl: input.logoUrl ?? null,
+        operation: input.operation ?? null,
+        alreadyInvesting: input.alreadyInvesting ?? false,
+        initialInvestment: input.initialInvestment ?? null,
+        reportedRevenue: input.reportedRevenue ?? null,
+        notes: input.notes ?? null,
       },
     })
 
@@ -76,6 +91,11 @@ export class ClientsService {
       data: {
         ...(input.name !== undefined && { name: input.name }),
         ...(input.logoUrl !== undefined && { logoUrl: input.logoUrl }),
+        ...(input.operation !== undefined && { operation: input.operation }),
+        ...(input.alreadyInvesting !== undefined && { alreadyInvesting: input.alreadyInvesting }),
+        ...(input.initialInvestment !== undefined && { initialInvestment: input.initialInvestment }),
+        ...(input.reportedRevenue !== undefined && { reportedRevenue: input.reportedRevenue }),
+        ...(input.notes !== undefined && { notes: input.notes }),
       },
     })
 

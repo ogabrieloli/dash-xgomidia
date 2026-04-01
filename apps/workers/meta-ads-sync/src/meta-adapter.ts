@@ -21,6 +21,8 @@ interface MetaInsightRow {
   impressions: string
   clicks: string
   spend: string
+  campaign_id?: string
+  campaign_name?: string
   actions?: Array<{ action_type: string; value: string }>
   action_values?: Array<{ action_type: string; value: string }>
 }
@@ -67,9 +69,10 @@ export class MetaAdapter implements PlatformAdapter {
     accountId: string,
     accessToken: string,
     dateRange: DateRange,
+    level: 'account' | 'campaign' = 'campaign',
   ): Promise<NormalizedMetric[]> {
     const metrics: NormalizedMetric[] = []
-    let nextUrl: string | undefined = this.buildInsightsUrl(accountId, accessToken, dateRange)
+    let nextUrl: string | undefined = this.buildInsightsUrl(accountId, accessToken, dateRange, level)
 
     while (nextUrl) {
       const res = await fetch(nextUrl)
@@ -102,6 +105,13 @@ export class MetaAdapter implements PlatformAdapter {
 
         if (revenue > 0) {
           metric.revenue = revenue
+        }
+
+        if (row.campaign_id) {
+          metric.externalCampaignId = row.campaign_id
+          if (row.campaign_name !== undefined) {
+            metric.campaignName = row.campaign_name
+          }
         }
 
         metrics.push(metric)
@@ -154,8 +164,13 @@ export class MetaAdapter implements PlatformAdapter {
     return body.data?.is_valid === true
   }
 
-  private buildInsightsUrl(accountId: string, accessToken: string, dateRange: DateRange): string {
-    const fields = [
+  private buildInsightsUrl(
+    accountId: string,
+    accessToken: string,
+    dateRange: DateRange,
+    level: 'account' | 'campaign' = 'campaign',
+  ): string {
+    const baseFields = [
       'date_start',
       'date_stop',
       'impressions',
@@ -163,13 +178,17 @@ export class MetaAdapter implements PlatformAdapter {
       'spend',
       'actions',
       'action_values',
-    ].join(',')
+    ]
+
+    if (level === 'campaign') {
+      baseFields.push('campaign_id', 'campaign_name')
+    }
 
     const params = new URLSearchParams({
-      fields,
+      fields: baseFields.join(','),
       time_range: JSON.stringify({ since: dateRange.from, until: dateRange.to }),
       time_increment: '1', // dia a dia
-      level: 'account',
+      level,
       access_token: accessToken,
       limit: '500',
     })

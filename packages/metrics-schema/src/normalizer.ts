@@ -14,6 +14,8 @@ export interface NormalizedMetric {
   spend: number                 // sempre em BRL (converter se necessário)
   conversions: number
   revenue?: number
+  externalCampaignId?: string   // presente quando level=campaign
+  campaignName?: string
   rawData: unknown              // dados originais da plataforma — útil para debug
 }
 

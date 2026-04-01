@@ -75,20 +75,22 @@ export async function processMetaAdsSyncJob(job: Job<MetaAdsSyncJob>): Promise<v
     log.info({ adAccountId }, 'Token renovado com sucesso')
   }
 
-  // 5. Buscar métricas
-  log.info({ adAccountId, dateRange }, 'Buscando métricas do Meta Ads')
-  const metrics = await metaAdapter.fetchMetrics(adAccount.externalId, accessToken, dateRange)
+  // 5. Buscar métricas por campanha
+  log.info({ adAccountId, dateRange }, 'Buscando métricas do Meta Ads (level=campaign)')
+  const metrics = await metaAdapter.fetchMetrics(adAccount.externalId, accessToken, dateRange, 'campaign')
   log.info({ adAccountId, count: metrics.length }, 'Métricas recebidas')
 
-  // 6. Persistir MetricSnapshots (upsert por dia)
+  // 6. Persistir MetricSnapshots (upsert por campanha por dia)
   let upsertCount = 0
   for (const metric of metrics) {
+    const externalCampaignId = metric.externalCampaignId ?? null
     await db.metricSnapshot.upsert({
       where: {
-        adAccountId_date_platform: {
+        adAccountId_date_platform_externalCampaignId: {
           adAccountId,
           date: new Date(metric.date),
           platform: 'META_ADS',
+          externalCampaignId: externalCampaignId ?? '',
         },
       },
       create: {
@@ -101,6 +103,8 @@ export async function processMetaAdsSyncJob(job: Job<MetaAdsSyncJob>): Promise<v
         conversions: metric.conversions,
         revenue: metric.revenue ?? null,
         rawData: metric.rawData as object,
+        externalCampaignId,
+        campaignName: metric.campaignName ?? null,
       },
       update: {
         impressions: BigInt(metric.impressions),
@@ -109,6 +113,7 @@ export async function processMetaAdsSyncJob(job: Job<MetaAdsSyncJob>): Promise<v
         conversions: metric.conversions,
         revenue: metric.revenue ?? null,
         rawData: metric.rawData as object,
+        campaignName: metric.campaignName ?? null,
       },
     })
     upsertCount++

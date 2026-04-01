@@ -98,6 +98,8 @@ export async function metricsRoutes(app: FastifyInstance) {
           revenue: c.revenue.toString(),
           roas: c.roas,
         })),
+        totalClients: result.totalClients,
+        averageInvestment: result.averageInvestment,
       },
     }
   })
@@ -115,6 +117,30 @@ export async function metricsRoutes(app: FastifyInstance) {
     })
 
     return { data: { totals: serializeTotals(result.totals) } }
+  })
+
+  // GET /api/metrics/strategy?strategyId=&clientId=&dateFrom=&dateTo=
+  app.get('/strategy', {
+    preHandler: [authenticate],
+  }, async (request) => {
+    const query = DateRangeQuerySchema.extend({
+      strategyId: z.string().uuid(),
+      clientId: z.string().uuid(),
+    }).parse(request.query)
+
+    await assertClientAccess(request.user.sub, request.user.role, query.clientId, app.db)
+
+    const result = await service.getByStrategy(query.strategyId, query.clientId, {
+      from: query.dateFrom,
+      to: query.dateTo,
+    })
+
+    return {
+      data: {
+        rows: result.rows.map(serializeRow),
+        totals: serializeTotals(result.totals),
+      },
+    }
   })
 
   // GET /api/metrics?adAccountId=&clientId=&dateFrom=&dateTo=

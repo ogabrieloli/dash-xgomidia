@@ -86,6 +86,13 @@ model Client {
   slug    String  @unique // para URLs amigáveis
   logoUrl String?
 
+  // Dados de negócio
+  operation         String?  // "O que é o negócio"
+  alreadyInvesting  Boolean  @default(false)
+  initialInvestment Decimal? @db.Decimal(12, 2) // valor inicial de investimento em tráfego
+  reportedRevenue   Decimal? @db.Decimal(12, 2) // faturamento relatado pelo cliente
+  notes             String?  @db.Text
+
   adAccounts      AdAccount[]
   projects        Project[]
   timelineEntries TimelineEntry[]
@@ -139,10 +146,15 @@ model Strategy {
   // Ex: { visibleMetrics: ['spend', 'roas', 'cpa'], goalRoas: 3.0, maxCpa: 50.0 }
   metricConfig Json @default("{}")
 
-  project    Project          @relation(fields: [projectId], references: [id])
+  objective      String?
+  budget         Decimal? @db.Decimal(12, 2)
+  dashboardConfig Json?   // { layout: GridItem[], widgets: Widget[] }
+
+  project    Project            @relation(fields: [projectId], references: [id])
   metrics    MetricSnapshot[]
   aiInsights AiInsight[]
   reports    Report[]
+  campaigns  StrategyCampaign[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -181,8 +193,9 @@ model AdAccount {
   syncStatus SyncStatus @default(PENDING)
   syncError  String?    // última mensagem de erro, se houver
 
-  client  Client           @relation(fields: [clientId], references: [id])
-  metrics MetricSnapshot[]
+  client    Client             @relation(fields: [clientId], references: [id])
+  metrics   MetricSnapshot[]
+  campaigns StrategyCampaign[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -190,6 +203,23 @@ model AdAccount {
   @@unique([clientId, platform, externalId])
   @@index([clientId])
   @@index([syncStatus])
+}
+
+model StrategyCampaign {
+  id          String @id @default(uuid())
+  strategyId  String
+  adAccountId String
+  externalId  String // Meta campaign_id
+  name        String
+
+  strategy  Strategy  @relation(fields: [strategyId], references: [id])
+  adAccount AdAccount @relation(fields: [adAccountId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([strategyId, externalId])
+  @@index([strategyId])
+  @@index([adAccountId])
 }
 
 enum Platform {
@@ -227,14 +257,19 @@ model MetricSnapshot {
   // Dados extras da plataforma (JSONB para flexibilidade)
   rawData Json? // dados brutos da plataforma — útil para debug
 
+  // Per-campaign granularity (null = agregado da conta)
+  externalCampaignId String?
+  campaignName       String?
+
   adAccount AdAccount @relation(fields: [adAccountId], references: [id])
   strategy  Strategy? @relation(fields: [strategyId], references: [id])
 
   createdAt DateTime @default(now())
 
-  @@unique([adAccountId, date, platform])
+  @@unique([adAccountId, date, platform, externalCampaignId])
   @@index([adAccountId, date])
   @@index([strategyId, date])
+  @@index([externalCampaignId])
 }
 
 // ─────────────────────────────────────────────

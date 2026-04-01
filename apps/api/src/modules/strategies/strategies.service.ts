@@ -8,11 +8,15 @@ interface CreateStrategyInput {
   name: string
   funnelType: FunnelType
   metricConfig: Record<string, unknown>
+  objective?: string | undefined
+  budget?: number | undefined
 }
 
 interface UpdateStrategyInput {
   name?: string | undefined
   funnelType?: FunnelType | undefined
+  objective?: string | null | undefined
+  budget?: number | null | undefined
 }
 
 export class StrategiesService {
@@ -38,6 +42,8 @@ export class StrategiesService {
         name: input.name,
         funnelType: input.funnelType,
         metricConfig: input.metricConfig as Prisma.InputJsonObject,
+        objective: input.objective ?? null,
+        budget: input.budget ?? null,
       },
     })
 
@@ -61,6 +67,8 @@ export class StrategiesService {
       data: {
         ...(input.name !== undefined && { name: input.name }),
         ...(input.funnelType !== undefined && { funnelType: input.funnelType }),
+        ...(input.objective !== undefined && { objective: input.objective }),
+        ...(input.budget !== undefined && { budget: input.budget }),
       },
     })
 
@@ -71,6 +79,19 @@ export class StrategiesService {
     })
 
     return updated
+  }
+
+  async updateDashboardConfig(id: string, dashboardConfig: Record<string, unknown>, userId: string) {
+    const existing = await this.db.strategy.findFirst({
+      where: { id, deletedAt: null },
+    })
+
+    if (!existing) throw new NotFoundError('Estratégia não encontrada')
+
+    return this.db.strategy.update({
+      where: { id },
+      data: { dashboardConfig: dashboardConfig as Prisma.InputJsonObject },
+    })
   }
 
   async updateMetricConfig(id: string, metricConfig: Record<string, unknown>, userId: string) {

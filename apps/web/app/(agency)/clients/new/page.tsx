@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -13,8 +14,12 @@ const CreateClientSchema = z.object({
     .string()
     .min(2, 'Slug deve ter pelo menos 2 caracteres')
     .max(50)
-    .regex(/^[a-z0-9-]+$/, 'Apenas letras minúsculas, números e hífens')
-    .transform((v) => v.toLowerCase().trim()),
+    .regex(/^[a-z0-9-]+$/, 'Apenas letras minúsculas, números e hífens'),
+  operation: z.string().max(500).optional(),
+  alreadyInvesting: z.boolean().default(false),
+  initialInvestment: z.string().optional(),
+  reportedRevenue: z.string().optional(),
+  notes: z.string().max(2000).optional(),
 })
 
 type CreateClientForm = z.infer<typeof CreateClientSchema>
@@ -22,19 +27,18 @@ type CreateClientForm = z.infer<typeof CreateClientSchema>
 export default function NewClientPage() {
   const router = useRouter()
   const queryClient = useQueryClient()
+  const [investingToggle, setInvestingToggle] = useState(false)
 
   const {
     register,
     handleSubmit,
-    watch,
     setValue,
     formState: { errors, isSubmitting },
   } = useForm<CreateClientForm>({
     resolver: zodResolver(CreateClientSchema),
+    defaultValues: { alreadyInvesting: false },
   })
 
-  // Auto-gerar slug a partir do nome
-  const nameValue = watch('name')
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const slug = e.target.value
       .toLowerCase()
@@ -46,9 +50,24 @@ export default function NewClientPage() {
     setValue('slug', slug)
   }
 
+  const handleInvestingToggle = (val: boolean) => {
+    setInvestingToggle(val)
+    setValue('alreadyInvesting', val)
+  }
+
   const mutation = useMutation({
     mutationFn: async (data: CreateClientForm) => {
-      const res = await api.post('/api/clients', data)
+      const payload: Record<string, unknown> = {
+        name: data.name,
+        slug: data.slug,
+        alreadyInvesting: data.alreadyInvesting,
+      }
+      if (data.operation) payload['operation'] = data.operation
+      if (data.initialInvestment) payload['initialInvestment'] = parseFloat(data.initialInvestment)
+      if (data.reportedRevenue) payload['reportedRevenue'] = parseFloat(data.reportedRevenue)
+      if (data.notes) payload['notes'] = data.notes
+
+      const res = await api.post('/api/clients', payload)
       return res.data.data
     },
     onSuccess: () => {
@@ -78,9 +97,7 @@ export default function NewClientPage() {
               type="text"
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               placeholder="Ex: Empresa ABC"
-              {...register('name', {
-                onChange: handleNameChange,
-              })}
+              {...register('name', { onChange: handleNameChange })}
             />
             {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
           </div>
@@ -96,10 +113,80 @@ export default function NewClientPage() {
               placeholder="empresa-abc"
               {...register('slug')}
             />
-            <p className="text-xs text-muted-foreground">
-              Usado em URLs. Apenas letras minúsculas, números e hífens.
-            </p>
+            <p className="text-xs text-muted-foreground">Usado em URLs. Apenas letras minúsculas, números e hífens.</p>
             {errors.slug && <p className="text-xs text-destructive">{errors.slug.message}</p>}
+          </div>
+
+          {/* Operação */}
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-foreground">O que é o negócio?</label>
+            <textarea
+              rows={3}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+              placeholder="Descreva brevemente a operação do cliente..."
+              {...register('operation')}
+            />
+          </div>
+
+          {/* Já investe em tráfego */}
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-foreground">Já investe em tráfego pago?</label>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => handleInvestingToggle(!investingToggle)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                  investingToggle ? 'bg-primary' : 'bg-muted'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    investingToggle ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+              <span className="text-sm text-muted-foreground">{investingToggle ? 'Sim' : 'Não'}</span>
+            </div>
+          </div>
+
+          {/* Valor inicial — só aparece se investe */}
+          {investingToggle && (
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-foreground">Valor de investimento mensal (R$)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="0,00"
+                {...register('initialInvestment')}
+              />
+            </div>
+          )}
+
+          {/* Faturamento */}
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-foreground">Faturamento relatado (R$)</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              placeholder="0,00"
+              {...register('reportedRevenue')}
+            />
+            <p className="text-xs text-muted-foreground">Opcional. Faturamento mensal informado pelo cliente.</p>
+          </div>
+
+          {/* Notas */}
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-foreground">Notas internas</label>
+            <textarea
+              rows={4}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+              placeholder="Observações, contexto, requisitos especiais..."
+              {...register('notes')}
+            />
           </div>
 
           {/* Erro do servidor */}

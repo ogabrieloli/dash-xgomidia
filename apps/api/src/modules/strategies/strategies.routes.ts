@@ -16,6 +16,8 @@ const CreateStrategySchema = z.object({
   metricConfig: z.record(z.unknown()).default({}),
   projectId: z.string().uuid(),
   clientId: z.string().uuid(), // para assertClientAccess
+  objective: z.string().max(500).optional(),
+  budget: z.number().positive().optional(),
 }).strict()
 
 const UpdateStrategySchema = z.object({
@@ -23,10 +25,16 @@ const UpdateStrategySchema = z.object({
   funnelType: FunnelTypeEnum.optional(),
   clientId: z.string().uuid(),
   projectId: z.string().uuid(),
+  objective: z.string().max(500).nullable().optional(),
+  budget: z.number().positive().nullable().optional(),
 }).strict()
 
 const MetricConfigSchema = z.object({
   metricConfig: z.record(z.unknown()),
+})
+
+const DashboardConfigSchema = z.object({
+  dashboardConfig: z.record(z.unknown()),
 })
 
 const StrategyParamsSchema = z.object({ id: z.string().uuid() })
@@ -91,6 +99,8 @@ export async function strategiesRoutes(app: FastifyInstance) {
         name: body.name,
         funnelType: body.funnelType as import('@xgo/shared-types').FunnelType,
         metricConfig: body.metricConfig,
+        objective: body.objective,
+        budget: body.budget,
       },
       body.projectId,
       request.user.sub,
@@ -111,10 +121,23 @@ export async function strategiesRoutes(app: FastifyInstance) {
       {
         name: body.name,
         funnelType: body.funnelType as import('@xgo/shared-types').FunnelType | undefined,
+        objective: body.objective,
+        budget: body.budget,
       },
       body.projectId,
       request.user.sub,
     )
+    return { data: strategy }
+  })
+
+  // PATCH /api/strategies/:id/dashboard-config
+  app.patch('/:id/dashboard-config', {
+    preHandler: [authenticate, requireRole('AGENCY_ADMIN', 'AGENCY_MANAGER')],
+  }, async (request) => {
+    const { id } = StrategyParamsSchema.parse(request.params)
+    const body = DashboardConfigSchema.parse(request.body)
+
+    const strategy = await service.updateDashboardConfig(id, body.dashboardConfig, request.user.sub)
     return { data: strategy }
   })
 
@@ -127,6 +150,22 @@ export async function strategiesRoutes(app: FastifyInstance) {
 
     const strategy = await service.updateMetricConfig(id, body.metricConfig, request.user.sub)
     return { data: strategy }
+  })
+
+  // GET /api/strategies/:id/campaigns?clientId=
+  app.get('/:id/campaigns', {
+    preHandler: [authenticate],
+  }, async (request) => {
+    const { id } = StrategyParamsSchema.parse(request.params)
+    const query = z.object({ clientId: z.string().uuid() }).parse(request.query)
+
+    await assertClientAccess(request.user.sub, request.user.role, query.clientId, app.db)
+
+    const campaigns = await app.db.strategyCampaign.findMany({
+      where: { strategyId: id },
+      orderBy: { createdAt: 'asc' },
+    })
+    return { data: campaigns }
   })
 
   // DELETE /api/strategies/:id

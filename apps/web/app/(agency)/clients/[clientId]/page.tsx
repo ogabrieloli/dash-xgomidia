@@ -11,7 +11,7 @@ import { Plus, FolderOpen } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { FUNNEL_TYPES } from '@xgo/shared-types'
-import { AdAccountsSection } from '@/components/ad-accounts-section'
+import { PlatformsSection } from '@/components/platforms-section'
 import { InsightsPanel } from '@/components/insights-panel'
 import { TimelineFeed } from '@/components/timeline-feed'
 
@@ -291,8 +291,8 @@ export default function ClientDetailPage() {
         </div>
       )}
 
-      {/* Contas de Anúncio */}
-      <AdAccountsSection clientId={clientId} />
+      {/* Plataformas */}
+      <PlatformsSection clientId={clientId} />
 
       {/* Insights automáticos */}
       <InsightsPanel clientId={clientId} />
