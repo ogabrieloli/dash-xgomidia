@@ -105,8 +105,6 @@ export async function metaOAuthRoutes(app: FastifyInstance) {
       scope: [
         'ads_read',
         'ads_management',
-        'business_management',
-        'read_insights',
       ].join(','),
       response_type: 'code',
       state,
