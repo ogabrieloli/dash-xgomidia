@@ -212,8 +212,8 @@ model StrategyCampaign {
   externalId  String // Meta campaign_id
   name        String
 
-  strategy  Strategy  @relation(fields: [strategyId], references: [id])
-  adAccount AdAccount @relation(fields: [adAccountId], references: [id])
+  strategy  Strategy  @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  adAccount AdAccount @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 
@@ -280,8 +280,8 @@ model MetricSnapshot {
   externalCampaignId String?
   campaignName       String?
 
-  adAccount AdAccount @relation(fields: [adAccountId], references: [id])
-  strategy  Strategy? @relation(fields: [strategyId], references: [id])
+  adAccount AdAccount @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+  strategy  Strategy? @relation(fields: [strategyId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
 

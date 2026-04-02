@@ -149,6 +149,14 @@ export function PlatformsSection({ clientId, pendingId }: PlatformsSectionProps)
     })
   }
 
+  const selectAll = () => {
+    setSelectedExternalIds(new Set((pendingData?.accounts ?? []).map((a) => a.id)))
+  }
+
+  const deselectAll = () => {
+    setSelectedExternalIds(new Set())
+  }
+
   const metaAccounts = accounts?.filter((a) => a.platform === 'META_ADS') ?? []
 
   return (
@@ -270,30 +278,49 @@ export function PlatformsSection({ clientId, pendingId }: PlatformsSectionProps)
                   ))}
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {(pendingData?.accounts ?? []).map((account) => (
-                    <label
-                      key={account.id}
-                      className={cn(
-                        'flex items-center gap-3 rounded-lg border px-4 py-3 cursor-pointer transition-colors',
-                        selectedExternalIds.has(account.id)
-                          ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-950/30'
-                          : 'hover:bg-accent/50',
-                      )}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedExternalIds.has(account.id)}
-                        onChange={() => toggleAccount(account.id)}
-                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">{account.name}</p>
-                        <p className="text-xs text-muted-foreground">{account.id} · {account.currency}</p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
+                <>
+                  {(pendingData?.accounts ?? []).length > 1 && (
+                    <div className="flex items-center gap-2 mb-3">
+                      <button
+                        onClick={selectAll}
+                        className="text-xs text-blue-600 hover:underline"
+                      >
+                        Selecionar tudo
+                      </button>
+                      <span className="text-muted-foreground text-xs">·</span>
+                      <button
+                        onClick={deselectAll}
+                        className="text-xs text-muted-foreground hover:underline"
+                      >
+                        Desselecionar tudo
+                      </button>
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    {(pendingData?.accounts ?? []).map((account) => (
+                      <label
+                        key={account.id}
+                        className={cn(
+                          'flex items-center gap-3 rounded-lg border px-4 py-3 cursor-pointer transition-colors',
+                          selectedExternalIds.has(account.id)
+                            ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-950/30'
+                            : 'hover:bg-accent/50',
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedExternalIds.has(account.id)}
+                          onChange={() => toggleAccount(account.id)}
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{account.name}</p>
+                          <p className="text-xs text-muted-foreground">{account.id} · {account.currency}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
 
