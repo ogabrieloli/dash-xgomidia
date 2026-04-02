@@ -1,8 +1,14 @@
 -- CreateEnum
 CREATE TYPE "StrategyObjective" AS ENUM ('LEAD', 'SALES', 'BRANDING');
 
--- AlterTable Strategy: add objective enum column
-ALTER TABLE "Strategy" ADD COLUMN "objective" "StrategyObjective";
+-- AlterTable Strategy: convert existing TEXT column to enum
+-- Rows with values outside the enum will be set to NULL
+ALTER TABLE "Strategy"
+  ALTER COLUMN "objective" TYPE "StrategyObjective"
+  USING CASE
+    WHEN "objective" IN ('LEAD', 'SALES', 'BRANDING') THEN "objective"::"StrategyObjective"
+    ELSE NULL
+  END;
 
 -- AlterTable MetricSnapshot: add 10 breakdown columns
 ALTER TABLE "MetricSnapshot"
