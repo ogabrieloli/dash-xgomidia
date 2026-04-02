@@ -10,13 +10,15 @@ const FunnelTypeEnum = z.enum(
   Object.values(FUNNEL_TYPES) as [string, ...string[]],
 )
 
+const StrategyObjectiveEnum = z.enum(['LEAD', 'SALES', 'BRANDING'])
+
 const CreateStrategySchema = z.object({
   name: z.string().min(2).max(100).trim(),
   funnelType: FunnelTypeEnum,
   metricConfig: z.record(z.unknown()).default({}),
   projectId: z.string().uuid(),
   clientId: z.string().uuid(), // para assertClientAccess
-  objective: z.string().max(500).optional(),
+  objective: StrategyObjectiveEnum.optional(),
   budget: z.number().positive().optional(),
 }).strict()
 
@@ -25,7 +27,7 @@ const UpdateStrategySchema = z.object({
   funnelType: FunnelTypeEnum.optional(),
   clientId: z.string().uuid(),
   projectId: z.string().uuid(),
-  objective: z.string().max(500).nullable().optional(),
+  objective: StrategyObjectiveEnum.nullable().optional(),
   budget: z.number().positive().nullable().optional(),
 }).strict()
 
@@ -99,7 +101,7 @@ export async function strategiesRoutes(app: FastifyInstance) {
         name: body.name,
         funnelType: body.funnelType as import('@xgo/shared-types').FunnelType,
         metricConfig: body.metricConfig,
-        objective: body.objective,
+        objective: body.objective as import('@prisma/client').StrategyObjective | undefined,
         budget: body.budget,
       },
       body.projectId,
@@ -121,7 +123,7 @@ export async function strategiesRoutes(app: FastifyInstance) {
       {
         name: body.name,
         funnelType: body.funnelType as import('@xgo/shared-types').FunnelType | undefined,
-        objective: body.objective,
+        objective: body.objective as import('@prisma/client').StrategyObjective | null | undefined,
         budget: body.budget,
       },
       body.projectId,

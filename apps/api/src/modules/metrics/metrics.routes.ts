@@ -29,6 +29,16 @@ function serializeRow(row: {
   revenue: { toString(): string } | null
   reach: number | null
   videoViews: number | null
+  leads: number
+  completeRegistration: number
+  landingPageViews: number
+  linkClicks: number
+  purchases: number
+  addToCart: number
+  initiateCheckout: number
+  viewContent: number
+  postEngagement: number
+  videoViews3s: number
   derived: Record<string, number>
 }) {
   return {
@@ -40,6 +50,16 @@ function serializeRow(row: {
     revenue: row.revenue?.toString() ?? null,
     reach: row.reach,
     videoViews: row.videoViews,
+    leads: row.leads,
+    completeRegistration: row.completeRegistration,
+    landingPageViews: row.landingPageViews,
+    linkClicks: row.linkClicks,
+    purchases: row.purchases,
+    addToCart: row.addToCart,
+    initiateCheckout: row.initiateCheckout,
+    viewContent: row.viewContent,
+    postEngagement: row.postEngagement,
+    videoViews3s: row.videoViews3s,
     derived: row.derived,
   }
 }
@@ -52,6 +72,16 @@ function serializeTotals(totals: {
   revenue: { toString(): string }
   reach: number
   videoViews: number
+  leads: number
+  completeRegistration: number
+  landingPageViews: number
+  linkClicks: number
+  purchases: number
+  addToCart: number
+  initiateCheckout: number
+  viewContent: number
+  postEngagement: number
+  videoViews3s: number
   derived: Record<string, number>
 }) {
   return {
@@ -62,6 +92,16 @@ function serializeTotals(totals: {
     revenue: totals.revenue.toString(),
     reach: totals.reach,
     videoViews: totals.videoViews,
+    leads: totals.leads,
+    completeRegistration: totals.completeRegistration,
+    landingPageViews: totals.landingPageViews,
+    linkClicks: totals.linkClicks,
+    purchases: totals.purchases,
+    addToCart: totals.addToCart,
+    initiateCheckout: totals.initiateCheckout,
+    viewContent: totals.viewContent,
+    postEngagement: totals.postEngagement,
+    videoViews3s: totals.videoViews3s,
     derived: totals.derived,
   }
 }

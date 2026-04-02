@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client'
+import type { PrismaClient, StrategyObjective } from '@prisma/client'
 import { Prisma } from '@prisma/client'
 import type { FunnelType } from '@xgo/shared-types'
 import { NotFoundError } from '../../shared/errors/index.js'
@@ -8,14 +8,14 @@ interface CreateStrategyInput {
   name: string
   funnelType: FunnelType
   metricConfig: Record<string, unknown>
-  objective?: string | undefined
+  objective?: StrategyObjective | undefined
   budget?: number | undefined
 }
 
 interface UpdateStrategyInput {
   name?: string | undefined
   funnelType?: FunnelType | undefined
-  objective?: string | null | undefined
+  objective?: StrategyObjective | null | undefined
   budget?: number | null | undefined
 }
 

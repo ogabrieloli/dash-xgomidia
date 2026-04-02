@@ -146,7 +146,7 @@ model Strategy {
   // Ex: { visibleMetrics: ['spend', 'roas', 'cpa'], goalRoas: 3.0, maxCpa: 50.0 }
   metricConfig Json @default("{}")
 
-  objective      String?
+  objective      StrategyObjective?
   budget         Decimal? @db.Decimal(12, 2)
   dashboardConfig Json?   // { layout: GridItem[], widgets: Widget[] }
 
@@ -237,6 +237,12 @@ model PendingMetaConnection {
   @@index([clientId])
 }
 
+enum StrategyObjective {
+  LEAD
+  SALES
+  BRANDING
+}
+
 enum Platform {
   META_ADS
   GOOGLE_ADS
@@ -268,10 +274,26 @@ model MetricSnapshot {
 
   // Métricas de alcance e engajamento
   reach      Int? // número de pessoas únicas alcançadas
-  videoViews Int? // visualizações de vídeo (ThruPlay)
+  videoViews Int? // visualizações de vídeo (ThruPlay ≥15s)
 
-  // Métricas derivadas são calculadas em runtime (CTR, CPC, CPA, ROAS, CPM)
-  // não armazenadas — usar views no DB ou calcular no service
+  // Objetivo: LEAD — action_types do Meta
+  leads               Int @default(0)  // action_type: lead
+  completeRegistration Int @default(0) // action_type: complete_registration
+  landingPageViews    Int @default(0)  // landing_page_view (tráfego que carregou a página)
+  linkClicks          Int @default(0)  // inline_link_clicks (cliques no link do anúncio)
+
+  // Objetivo: SALES — funil de compra
+  purchases        Int @default(0) // action_type: purchase
+  addToCart        Int @default(0) // action_type: add_to_cart
+  initiateCheckout Int @default(0) // action_type: initiate_checkout
+  viewContent      Int @default(0) // action_type: view_content
+
+  // Objetivo: BRANDING — engajamento
+  postEngagement Int @default(0) // action_type: post_engagement (likes+comments+shares)
+  videoViews3s   Int @default(0) // action_type: video_view (visualizações ≥3 segundos)
+
+  // Métricas derivadas são calculadas em runtime (CTR, CPC, CPA, ROAS, CPM, CPL)
+  // não armazenadas — calcular no service
 
   // Dados extras da plataforma (JSONB para flexibilidade)
   rawData Json? // dados brutos da plataforma — útil para debug

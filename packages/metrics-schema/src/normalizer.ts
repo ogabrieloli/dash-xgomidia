@@ -15,7 +15,24 @@ export interface NormalizedMetric {
   conversions: number
   revenue?: number
   reach?: number                // pessoas únicas alcançadas
-  videoViews?: number           // visualizações de vídeo (ThruPlay)
+  videoViews?: number           // visualizações de vídeo (ThruPlay ≥15s)
+
+  // Objetivo: LEAD
+  leads?: number                // action_type: lead
+  completeRegistration?: number // action_type: complete_registration
+  landingPageViews?: number     // landing_page_view
+  linkClicks?: number           // inline_link_clicks
+
+  // Objetivo: SALES
+  purchases?: number            // action_type: purchase
+  addToCart?: number            // action_type: add_to_cart
+  initiateCheckout?: number     // action_type: initiate_checkout
+  viewContent?: number          // action_type: view_content
+
+  // Objetivo: BRANDING
+  postEngagement?: number       // action_type: post_engagement
+  videoViews3s?: number         // action_type: video_view (≥3s)
+
   externalCampaignId?: string   // presente quando level=campaign
   campaignName?: string
   rawData: unknown              // dados originais da plataforma — útil para debug

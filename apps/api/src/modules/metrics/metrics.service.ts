@@ -12,12 +12,30 @@ export interface MetricRow {
   revenue: Decimal | null
   reach: number | null
   videoViews: number | null
+  // LEAD
+  leads: number
+  completeRegistration: number
+  landingPageViews: number
+  linkClicks: number
+  // SALES
+  purchases: number
+  addToCart: number
+  initiateCheckout: number
+  viewContent: number
+  // BRANDING
+  postEngagement: number
+  videoViews3s: number
   derived: {
     ctr: number
     cpc: number
     cpa: number
     roas: number
     cpm: number
+    cpl: number
+    conversionRate: number
+    costPerPurchase: number
+    cartToCheckoutRate: number
+    checkoutToPurchaseRate: number
   }
 }
 
@@ -29,12 +47,30 @@ export interface MetricTotals {
   revenue: Decimal
   reach: number
   videoViews: number
+  // LEAD
+  leads: number
+  completeRegistration: number
+  landingPageViews: number
+  linkClicks: number
+  // SALES
+  purchases: number
+  addToCart: number
+  initiateCheckout: number
+  viewContent: number
+  // BRANDING
+  postEngagement: number
+  videoViews3s: number
   derived: {
     ctr: number
     cpc: number
     cpa: number
     roas: number
     cpm: number
+    cpl: number
+    conversionRate: number
+    costPerPurchase: number
+    cartToCheckoutRate: number
+    checkoutToPurchaseRate: number
   }
 }
 
@@ -68,8 +104,13 @@ function computeDerived(
   spend: number,
   conversions: number,
   revenue: number,
+  leads: number,
+  linkClicks: number,
+  purchases: number,
+  addToCart: number,
+  initiateCheckout: number,
 ) {
-  return calculateDerivedMetrics({
+  const base = calculateDerivedMetrics({
     date: '',
     platform: 'META_ADS',
     externalAccountId: '',
@@ -80,6 +121,15 @@ function computeDerived(
     revenue,
     rawData: null,
   })
+
+  return {
+    ...base,
+    cpl: leads > 0 ? spend / leads : 0,
+    conversionRate: linkClicks > 0 ? leads / linkClicks : 0,
+    costPerPurchase: purchases > 0 ? spend / purchases : 0,
+    cartToCheckoutRate: addToCart > 0 ? initiateCheckout / addToCart : 0,
+    checkoutToPurchaseRate: initiateCheckout > 0 ? purchases / initiateCheckout : 0,
+  }
 }
 
 function buildTotals(rows: MetricRow[]): MetricTotals {
@@ -93,6 +143,16 @@ function buildTotals(rows: MetricRow[]): MetricTotals {
   )
   const reach = rows.reduce((s, r) => s + (r.reach ?? 0), 0)
   const videoViews = rows.reduce((s, r) => s + (r.videoViews ?? 0), 0)
+  const leads = rows.reduce((s, r) => s + r.leads, 0)
+  const completeRegistration = rows.reduce((s, r) => s + r.completeRegistration, 0)
+  const landingPageViews = rows.reduce((s, r) => s + r.landingPageViews, 0)
+  const linkClicks = rows.reduce((s, r) => s + r.linkClicks, 0)
+  const purchases = rows.reduce((s, r) => s + r.purchases, 0)
+  const addToCart = rows.reduce((s, r) => s + r.addToCart, 0)
+  const initiateCheckout = rows.reduce((s, r) => s + r.initiateCheckout, 0)
+  const viewContent = rows.reduce((s, r) => s + r.viewContent, 0)
+  const postEngagement = rows.reduce((s, r) => s + r.postEngagement, 0)
+  const videoViews3s = rows.reduce((s, r) => s + r.videoViews3s, 0)
 
   return {
     impressions,
@@ -102,12 +162,27 @@ function buildTotals(rows: MetricRow[]): MetricTotals {
     revenue,
     reach,
     videoViews,
+    leads,
+    completeRegistration,
+    landingPageViews,
+    linkClicks,
+    purchases,
+    addToCart,
+    initiateCheckout,
+    viewContent,
+    postEngagement,
+    videoViews3s,
     derived: computeDerived(
       impressions,
       clicks,
       spend.toNumber(),
       conversions,
       revenue.toNumber(),
+      leads,
+      linkClicks,
+      purchases,
+      addToCart,
+      initiateCheckout,
     ),
   }
 }
@@ -122,6 +197,16 @@ function snapshotsToRows(
     revenue: Decimal | null
     reach: number | null
     videoViews: number | null
+    leads: number
+    completeRegistration: number
+    landingPageViews: number
+    linkClicks: number
+    purchases: number
+    addToCart: number
+    initiateCheckout: number
+    viewContent: number
+    postEngagement: number
+    videoViews3s: number
   }>,
 ): MetricRow[] {
   return snapshots.map((s) => {
@@ -140,7 +225,28 @@ function snapshotsToRows(
       revenue: s.revenue,
       reach: s.reach,
       videoViews: s.videoViews,
-      derived: computeDerived(impressions, clicks, spend, conversions, revenue),
+      leads: s.leads,
+      completeRegistration: s.completeRegistration,
+      landingPageViews: s.landingPageViews,
+      linkClicks: s.linkClicks,
+      purchases: s.purchases,
+      addToCart: s.addToCart,
+      initiateCheckout: s.initiateCheckout,
+      viewContent: s.viewContent,
+      postEngagement: s.postEngagement,
+      videoViews3s: s.videoViews3s,
+      derived: computeDerived(
+        impressions,
+        clicks,
+        spend,
+        conversions,
+        revenue,
+        s.leads,
+        s.linkClicks,
+        s.purchases,
+        s.addToCart,
+        s.initiateCheckout,
+      ),
     }
   })
 }

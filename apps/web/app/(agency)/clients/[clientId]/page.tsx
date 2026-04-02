@@ -55,9 +55,15 @@ type CreateProjectForm = z.infer<typeof CreateProjectSchema>
 const CreateStrategySchema = z.object({
   name: z.string().min(2).max(100).trim(),
   funnelType: z.enum(Object.values(FUNNEL_TYPES) as [string, ...string[]]),
-  objective: z.string().max(500).optional(),
+  objective: z.enum(['LEAD', 'SALES', 'BRANDING']).optional(),
 })
 type CreateStrategyForm = z.infer<typeof CreateStrategySchema>
+
+const OBJECTIVE_LABELS: Record<string, string> = {
+  LEAD: 'Geração de Leads',
+  SALES: 'Vendas (E-commerce)',
+  BRANDING: 'Branding / Alcance',
+}
 
 const FUNNEL_LABELS: Record<string, string> = {
   WEBINAR: 'Webinário',
@@ -367,7 +373,7 @@ export default function ClientDetailPage() {
                               </span>
                             </div>
                             {strategy.objective && (
-                              <p className="text-xs text-muted-foreground line-clamp-2">{strategy.objective}</p>
+                              <p className="text-xs text-muted-foreground line-clamp-2">{OBJECTIVE_LABELS[strategy.objective] ?? strategy.objective}</p>
                             )}
                             <div className="flex items-center gap-1 text-xs text-primary mt-auto group-hover:gap-2 transition-all">
                               <LayoutDashboard className="h-3.5 w-3.5" />
@@ -403,12 +409,15 @@ export default function ClientDetailPage() {
                             ))}
                           </select>
                         </div>
-                        <textarea
-                          placeholder="Objetivo principal (opcional)"
-                          rows={2}
-                          className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                        <select
+                          className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                           {...strategyForm.register('objective')}
-                        />
+                        >
+                          <option value="">Objetivo (opcional)</option>
+                          {Object.entries(OBJECTIVE_LABELS).map(([value, label]) => (
+                            <option key={value} value={value}>{label}</option>
+                          ))}
+                        </select>
                         <div className="flex gap-2">
                           <button
                             type="submit"

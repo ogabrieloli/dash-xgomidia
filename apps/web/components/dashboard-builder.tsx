@@ -40,6 +40,8 @@ export interface DashboardConfig {
 
 interface DerivedMetrics {
   ctr: number; cpc: number; cpa: number; roas: number; cpm: number
+  cpl: number; conversionRate: number; costPerPurchase: number
+  cartToCheckoutRate: number; checkoutToPurchaseRate: number
 }
 
 interface MetricRow {
@@ -51,6 +53,16 @@ interface MetricRow {
   revenue: string | null
   reach?: number
   videoViews?: number
+  leads?: number
+  completeRegistration?: number
+  landingPageViews?: number
+  linkClicks?: number
+  purchases?: number
+  addToCart?: number
+  initiateCheckout?: number
+  viewContent?: number
+  postEngagement?: number
+  videoViews3s?: number
   derived: DerivedMetrics
 }
 
@@ -62,6 +74,16 @@ interface MetricTotals {
   revenue: string
   reach?: number
   videoViews?: number
+  leads?: number
+  completeRegistration?: number
+  landingPageViews?: number
+  linkClicks?: number
+  purchases?: number
+  addToCart?: number
+  initiateCheckout?: number
+  viewContent?: number
+  postEngagement?: number
+  videoViews3s?: number
   derived: DerivedMetrics
 }
 
@@ -69,61 +91,130 @@ interface DashboardBuilderProps {
   strategyId: string
   initialConfig?: DashboardConfig | null
   metrics?: { rows: MetricRow[]; totals: MetricTotals } | null
+  objective?: string | null
 }
 
 // ─── Metric config ─────────────────────────────────────────────────────────────
 
 export const METRIC_OPTIONS = [
-  { value: 'spend',       label: 'Investimento',   format: 'currency' },
-  { value: 'revenue',     label: 'Receita',         format: 'currency' },
-  { value: 'roas',        label: 'ROAS',            format: 'roas'     },
-  { value: 'ctr',         label: 'CTR',             format: 'percent'  },
-  { value: 'cpc',         label: 'CPC',             format: 'currency' },
-  { value: 'cpa',         label: 'CPA',             format: 'currency' },
-  { value: 'cpm',         label: 'CPM',             format: 'currency' },
-  { value: 'impressions', label: 'Impressões',      format: 'number'   },
-  { value: 'clicks',      label: 'Cliques',         format: 'number'   },
-  { value: 'conversions', label: 'Conversões',      format: 'number'   },
-  { value: 'reach',       label: 'Alcance',         format: 'number'   },
-  { value: 'frequency',   label: 'Frequência',      format: 'number'   },
-  { value: 'videoViews',  label: 'Views de Vídeo',  format: 'number'   },
+  // Universais
+  { value: 'spend',                label: 'Investimento',          format: 'currency', group: 'universal' },
+  { value: 'revenue',              label: 'Receita',               format: 'currency', group: 'universal' },
+  { value: 'roas',                 label: 'ROAS',                  format: 'roas',     group: 'universal' },
+  { value: 'ctr',                  label: 'CTR',                   format: 'percent',  group: 'universal' },
+  { value: 'cpc',                  label: 'CPC',                   format: 'currency', group: 'universal' },
+  { value: 'cpa',                  label: 'CPA',                   format: 'currency', group: 'universal' },
+  { value: 'cpm',                  label: 'CPM',                   format: 'currency', group: 'universal' },
+  { value: 'impressions',          label: 'Impressões',            format: 'number',   group: 'universal' },
+  { value: 'clicks',               label: 'Cliques',               format: 'number',   group: 'universal' },
+  { value: 'conversions',          label: 'Conversões',            format: 'number',   group: 'universal' },
+  { value: 'reach',                label: 'Alcance',               format: 'number',   group: 'universal' },
+  { value: 'frequency',            label: 'Frequência',            format: 'number',   group: 'universal' },
+  // LEAD
+  { value: 'leads',                label: 'Leads',                 format: 'number',   group: 'lead' },
+  { value: 'cpl',                  label: 'CPL',                   format: 'currency', group: 'lead' },
+  { value: 'conversionRate',       label: 'Taxa de Conversão',     format: 'percent',  group: 'lead' },
+  { value: 'completeRegistration', label: 'Cadastros Completos',   format: 'number',   group: 'lead' },
+  { value: 'landingPageViews',     label: 'Views de Landing Page', format: 'number',   group: 'lead' },
+  { value: 'linkClicks',           label: 'Cliques no Link',       format: 'number',   group: 'lead' },
+  // SALES
+  { value: 'purchases',            label: 'Compras',               format: 'number',   group: 'sales' },
+  { value: 'costPerPurchase',      label: 'Custo por Compra',      format: 'currency', group: 'sales' },
+  { value: 'addToCart',            label: 'Adições ao Carrinho',   format: 'number',   group: 'sales' },
+  { value: 'initiateCheckout',     label: 'Início de Checkout',    format: 'number',   group: 'sales' },
+  { value: 'viewContent',          label: 'Visualiz. de Produto',  format: 'number',   group: 'sales' },
+  { value: 'cartToCheckoutRate',   label: 'Taxa Carrinho→Checkout',format: 'percent',  group: 'sales' },
+  { value: 'checkoutToPurchaseRate', label: 'Taxa Checkout→Compra',format: 'percent',  group: 'sales' },
+  // BRANDING
+  { value: 'postEngagement',       label: 'Engajamento',           format: 'number',   group: 'branding' },
+  { value: 'videoViews3s',         label: 'Views 3s',              format: 'number',   group: 'branding' },
+  { value: 'videoViews',           label: 'ThruPlay (15s)',         format: 'number',   group: 'branding' },
 ]
 
-const METRIC_PRESETS = [
-  {
-    id: 'visibilidade',
-    label: 'Visibilidade',
-    color: 'bg-purple-500/10 text-purple-700 border-purple-200',
-    widgets: [
-      { type: 'kpi' as const, metric: 'impressions' },
-      { type: 'kpi' as const, metric: 'reach'       },
-      { type: 'kpi' as const, metric: 'frequency'   },
-      { type: 'kpi' as const, metric: 'cpm'         },
-    ],
-  },
-  {
-    id: 'performance',
-    label: 'Performance',
-    color: 'bg-blue-500/10 text-blue-700 border-blue-200',
-    widgets: [
-      { type: 'kpi' as const,       metric: 'clicks'  },
-      { type: 'kpi' as const,       metric: 'ctr'     },
-      { type: 'kpi' as const,       metric: 'cpc'     },
-      { type: 'area_chart' as const, metric: 'spend'  },
-    ],
-  },
-  {
-    id: 'conversao',
-    label: 'Conversão',
-    color: 'bg-green-500/10 text-green-700 border-green-200',
-    widgets: [
-      { type: 'kpi' as const, metric: 'conversions' },
-      { type: 'kpi' as const, metric: 'cpa'         },
-      { type: 'kpi' as const, metric: 'revenue'     },
-      { type: 'kpi' as const, metric: 'roas'        },
-    ],
-  },
-]
+const OBJECTIVE_PRESETS: Record<string, { id: string; label: string; color: string; widgets: { type: 'kpi' | 'area_chart'; metric: string }[] }[]> = {
+  LEAD: [
+    {
+      id: 'lead_overview',
+      label: 'Leads',
+      color: 'bg-blue-500/10 text-blue-700 border-blue-200',
+      widgets: [
+        { type: 'kpi', metric: 'leads' },
+        { type: 'kpi', metric: 'cpl' },
+        { type: 'kpi', metric: 'ctr' },
+        { type: 'kpi', metric: 'conversionRate' },
+        { type: 'area_chart', metric: 'spend' },
+        { type: 'area_chart', metric: 'leads' },
+      ],
+    },
+  ],
+  SALES: [
+    {
+      id: 'sales_overview',
+      label: 'Vendas',
+      color: 'bg-green-500/10 text-green-700 border-green-200',
+      widgets: [
+        { type: 'kpi', metric: 'purchases' },
+        { type: 'kpi', metric: 'roas' },
+        { type: 'kpi', metric: 'costPerPurchase' },
+        { type: 'kpi', metric: 'revenue' },
+        { type: 'kpi', metric: 'addToCart' },
+        { type: 'kpi', metric: 'initiateCheckout' },
+        { type: 'area_chart', metric: 'spend' },
+      ],
+    },
+  ],
+  BRANDING: [
+    {
+      id: 'branding_overview',
+      label: 'Branding',
+      color: 'bg-purple-500/10 text-purple-700 border-purple-200',
+      widgets: [
+        { type: 'kpi', metric: 'reach' },
+        { type: 'kpi', metric: 'frequency' },
+        { type: 'kpi', metric: 'cpm' },
+        { type: 'kpi', metric: 'postEngagement' },
+        { type: 'kpi', metric: 'videoViews3s' },
+        { type: 'area_chart', metric: 'impressions' },
+      ],
+    },
+  ],
+  // Presets genéricos (fallback quando sem objetivo)
+  _generic: [
+    {
+      id: 'visibilidade',
+      label: 'Visibilidade',
+      color: 'bg-purple-500/10 text-purple-700 border-purple-200',
+      widgets: [
+        { type: 'kpi', metric: 'impressions' },
+        { type: 'kpi', metric: 'reach' },
+        { type: 'kpi', metric: 'frequency' },
+        { type: 'kpi', metric: 'cpm' },
+      ],
+    },
+    {
+      id: 'performance',
+      label: 'Performance',
+      color: 'bg-blue-500/10 text-blue-700 border-blue-200',
+      widgets: [
+        { type: 'kpi', metric: 'clicks' },
+        { type: 'kpi', metric: 'ctr' },
+        { type: 'kpi', metric: 'cpc' },
+        { type: 'area_chart', metric: 'spend' },
+      ],
+    },
+    {
+      id: 'conversao',
+      label: 'Conversão',
+      color: 'bg-green-500/10 text-green-700 border-green-200',
+      widgets: [
+        { type: 'kpi', metric: 'conversions' },
+        { type: 'kpi', metric: 'cpa' },
+        { type: 'kpi', metric: 'revenue' },
+        { type: 'kpi', metric: 'roas' },
+      ],
+    },
+  ],
+}
 
 const DEFAULT_WIDGET_SIZE: Record<DashboardWidget['type'], { w: number; h: number }> = {
   kpi:        { w: 3, h: 2 },
@@ -136,39 +227,75 @@ const DEFAULT_WIDGET_SIZE: Record<DashboardWidget['type'], { w: number; h: numbe
 function getMetricValue(metric: string, totals: MetricTotals): string {
   const d = totals.derived
   switch (metric) {
-    case 'spend':       return formatCurrency(parseFloat(totals.spend))
-    case 'revenue':     return formatCurrency(parseFloat(totals.revenue ?? '0'))
-    case 'roas':        return `${d.roas.toFixed(2)}x`
-    case 'ctr':         return formatPercent(d.ctr)
-    case 'cpc':         return formatCurrency(d.cpc)
-    case 'cpa':         return formatCurrency(d.cpa)
-    case 'cpm':         return formatCurrency(d.cpm)
-    case 'impressions': return formatNumber(totals.impressions)
-    case 'clicks':      return formatNumber(totals.clicks)
-    case 'conversions': return formatNumber(totals.conversions)
-    case 'reach':       return formatNumber(totals.reach ?? 0)
-    case 'frequency':   return totals.reach ? (totals.impressions / totals.reach).toFixed(2) : '—'
-    case 'videoViews':  return formatNumber(totals.videoViews ?? 0)
-    default:            return '—'
+    case 'spend':                  return formatCurrency(parseFloat(totals.spend))
+    case 'revenue':                return formatCurrency(parseFloat(totals.revenue ?? '0'))
+    case 'roas':                   return `${d.roas.toFixed(2)}x`
+    case 'ctr':                    return formatPercent(d.ctr)
+    case 'cpc':                    return formatCurrency(d.cpc)
+    case 'cpa':                    return formatCurrency(d.cpa)
+    case 'cpm':                    return formatCurrency(d.cpm)
+    case 'impressions':            return formatNumber(totals.impressions)
+    case 'clicks':                 return formatNumber(totals.clicks)
+    case 'conversions':            return formatNumber(totals.conversions)
+    case 'reach':                  return formatNumber(totals.reach ?? 0)
+    case 'frequency':              return totals.reach ? (totals.impressions / totals.reach).toFixed(2) : '—'
+    case 'videoViews':             return formatNumber(totals.videoViews ?? 0)
+    // LEAD
+    case 'leads':                  return formatNumber(totals.leads ?? 0)
+    case 'cpl':                    return formatCurrency(d.cpl)
+    case 'conversionRate':         return formatPercent(d.conversionRate)
+    case 'completeRegistration':   return formatNumber(totals.completeRegistration ?? 0)
+    case 'landingPageViews':       return formatNumber(totals.landingPageViews ?? 0)
+    case 'linkClicks':             return formatNumber(totals.linkClicks ?? 0)
+    // SALES
+    case 'purchases':              return formatNumber(totals.purchases ?? 0)
+    case 'costPerPurchase':        return formatCurrency(d.costPerPurchase)
+    case 'addToCart':              return formatNumber(totals.addToCart ?? 0)
+    case 'initiateCheckout':       return formatNumber(totals.initiateCheckout ?? 0)
+    case 'viewContent':            return formatNumber(totals.viewContent ?? 0)
+    case 'cartToCheckoutRate':     return formatPercent(d.cartToCheckoutRate)
+    case 'checkoutToPurchaseRate': return formatPercent(d.checkoutToPurchaseRate)
+    // BRANDING
+    case 'postEngagement':         return formatNumber(totals.postEngagement ?? 0)
+    case 'videoViews3s':           return formatNumber(totals.videoViews3s ?? 0)
+    default:                       return '—'
   }
 }
 
 function getChartValue(row: MetricRow, metric: string): number {
   const d = row.derived
   switch (metric) {
-    case 'spend':       return parseFloat(row.spend)
-    case 'revenue':     return parseFloat(row.revenue ?? '0')
-    case 'roas':        return d.roas
-    case 'ctr':         return d.ctr
-    case 'cpc':         return d.cpc
-    case 'cpa':         return d.cpa
-    case 'cpm':         return d.cpm
-    case 'impressions': return row.impressions
-    case 'clicks':      return row.clicks
-    case 'conversions': return row.conversions
-    case 'reach':       return row.reach ?? 0
-    case 'videoViews':  return row.videoViews ?? 0
-    default:            return 0
+    case 'spend':                  return parseFloat(row.spend)
+    case 'revenue':                return parseFloat(row.revenue ?? '0')
+    case 'roas':                   return d.roas
+    case 'ctr':                    return d.ctr
+    case 'cpc':                    return d.cpc
+    case 'cpa':                    return d.cpa
+    case 'cpm':                    return d.cpm
+    case 'impressions':            return row.impressions
+    case 'clicks':                 return row.clicks
+    case 'conversions':            return row.conversions
+    case 'reach':                  return row.reach ?? 0
+    case 'videoViews':             return row.videoViews ?? 0
+    // LEAD
+    case 'leads':                  return row.leads ?? 0
+    case 'cpl':                    return d.cpl
+    case 'conversionRate':         return d.conversionRate
+    case 'completeRegistration':   return row.completeRegistration ?? 0
+    case 'landingPageViews':       return row.landingPageViews ?? 0
+    case 'linkClicks':             return row.linkClicks ?? 0
+    // SALES
+    case 'purchases':              return row.purchases ?? 0
+    case 'costPerPurchase':        return d.costPerPurchase
+    case 'addToCart':              return row.addToCart ?? 0
+    case 'initiateCheckout':       return row.initiateCheckout ?? 0
+    case 'viewContent':            return row.viewContent ?? 0
+    case 'cartToCheckoutRate':     return d.cartToCheckoutRate
+    case 'checkoutToPurchaseRate': return d.checkoutToPurchaseRate
+    // BRANDING
+    case 'postEngagement':         return row.postEngagement ?? 0
+    case 'videoViews3s':           return row.videoViews3s ?? 0
+    default:                       return 0
   }
 }
 
@@ -278,7 +405,7 @@ function ChartWidget({
 
 // ─── Main component ────────────────────────────────────────────────────────────
 
-export function DashboardBuilder({ strategyId, initialConfig, metrics }: DashboardBuilderProps) {
+export function DashboardBuilder({ strategyId, initialConfig, metrics, objective }: DashboardBuilderProps) {
   const [widgets, setWidgets] = useState<DashboardWidget[]>(initialConfig?.widgets ?? [])
   const [layout, setLayout] = useState<LayoutItem[]>(initialConfig?.layout ?? [])
   const [isEditing, setIsEditing] = useState(false)
@@ -307,7 +434,9 @@ export function DashboardBuilder({ strategyId, initialConfig, metrics }: Dashboa
     setLayout((prev) => [...prev, { i: id, x: 0, y: Infinity, ...size }])
   }, [])
 
-  const addPreset = useCallback((preset: typeof METRIC_PRESETS[number]) => {
+  const activePresets = objective && OBJECTIVE_PRESETS[objective] ? OBJECTIVE_PRESETS[objective] : OBJECTIVE_PRESETS['_generic']
+
+  const addPreset = useCallback((preset: (typeof OBJECTIVE_PRESETS)[string][number]) => {
     const now = Date.now()
     const newWidgets: DashboardWidget[] = preset.widgets.map((w, i) => ({
       id: `widget-${now}-${i}`,
@@ -360,7 +489,7 @@ export function DashboardBuilder({ strategyId, initialConfig, metrics }: Dashboa
             {/* Preset buttons */}
             <div className="flex items-center gap-1.5">
               <span className="text-xs text-muted-foreground">Presets:</span>
-              {METRIC_PRESETS.map((preset) => (
+              {activePresets.map((preset) => (
                 <button
                   key={preset.id}
                   onClick={() => addPreset(preset)}

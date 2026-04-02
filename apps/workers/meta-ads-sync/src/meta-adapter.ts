@@ -22,6 +22,8 @@ interface MetaInsightRow {
   clicks: string
   spend: string
   reach?: string
+  inline_link_clicks?: string
+  landing_page_view?: string
   campaign_id?: string
   campaign_name?: string
   actions?: Array<{ action_type: string; value: string }>
@@ -91,10 +93,18 @@ export class MetaAdapter implements PlatformAdapter {
         const body = (await res.json()) as MetaInsightsResponse
 
         for (const row of body.data) {
-          const conversions =
-            extractActionValue(row.actions, 'purchase') +
-            extractActionValue(row.actions, 'lead') +
-            extractActionValue(row.actions, 'complete_registration')
+          // Campos individuais de conversão por objetivo
+          const leads = extractActionValue(row.actions, 'lead')
+          const purchases = extractActionValue(row.actions, 'purchase')
+          const addToCart = extractActionValue(row.actions, 'add_to_cart')
+          const initiateCheckout = extractActionValue(row.actions, 'initiate_checkout')
+          const viewContent = extractActionValue(row.actions, 'view_content')
+          const completeRegistration = extractActionValue(row.actions, 'complete_registration')
+          const postEngagement = extractActionValue(row.actions, 'post_engagement')
+          const videoViews3s = extractActionValue(row.actions, 'video_view')
+
+          // conversions = soma retrocompatível
+          const conversions = purchases + leads + completeRegistration
 
           const revenue = extractActionValue(row.action_values, 'purchase')
 
@@ -106,6 +116,16 @@ export class MetaAdapter implements PlatformAdapter {
             clicks: parseInt(row.clicks, 10) || 0,
             spend: parseFloat(row.spend) || 0,
             conversions,
+            leads,
+            purchases,
+            addToCart,
+            initiateCheckout,
+            viewContent,
+            completeRegistration,
+            postEngagement,
+            videoViews3s,
+            linkClicks: parseInt(row.inline_link_clicks ?? '0', 10) || 0,
+            landingPageViews: parseInt(row.landing_page_view ?? '0', 10) || 0,
             rawData: row,
           }
 
@@ -195,6 +215,8 @@ export class MetaAdapter implements PlatformAdapter {
       'clicks',
       'spend',
       'reach',
+      'inline_link_clicks',
+      'landing_page_view',
       'actions',
       'action_values',
       'video_thruplay_watched_actions',

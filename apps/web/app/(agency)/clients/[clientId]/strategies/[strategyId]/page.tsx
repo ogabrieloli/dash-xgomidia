@@ -31,23 +31,36 @@ import { AiChat } from '@/components/ai-chat'
 import { KpiCard } from '@/components/kpi-card'
 import { DateRangePicker, type DateRangeValue } from '@/components/date-range-picker'
 import { DashboardBuilder } from '@/components/dashboard-builder'
+import { StrategyInsights } from '@/components/strategy-insights'
 
 interface DerivedMetrics {
   ctr: number; cpc: number; cpa: number; roas: number; cpm: number
+  cpl: number; conversionRate: number; costPerPurchase: number
+  cartToCheckoutRate: number; checkoutToPurchaseRate: number
 }
 
 interface MetricRow {
   date: string; impressions: number; clicks: number; spend: string
-  conversions: number; revenue: string | null; derived: DerivedMetrics
+  conversions: number; revenue: string | null
+  reach?: number; videoViews?: number
+  leads?: number; completeRegistration?: number; landingPageViews?: number; linkClicks?: number
+  purchases?: number; addToCart?: number; initiateCheckout?: number; viewContent?: number
+  postEngagement?: number; videoViews3s?: number
+  derived: DerivedMetrics
 }
 
 interface MetricsTotals {
   impressions: number; clicks: number; spend: string; conversions: number
-  revenue: string; derived: DerivedMetrics
+  revenue: string; reach?: number; videoViews?: number
+  leads?: number; completeRegistration?: number; landingPageViews?: number; linkClicks?: number
+  purchases?: number; addToCart?: number; initiateCheckout?: number; viewContent?: number
+  postEngagement?: number; videoViews3s?: number
+  derived: DerivedMetrics
 }
 
 interface Strategy {
   id: string; name: string; funnelType: string; projectId: string
+  objective: string | null; budget: number | null
   dashboardConfig: unknown
 }
 
@@ -587,11 +600,21 @@ export default function StrategyDashboardPage() {
               <span className="text-sm">Carregando métricas...</span>
             </div>
           ) : (
-            <DashboardBuilder
-              strategyId={strategyId}
-              initialConfig={strategyInfo?.dashboardConfig as import('@/components/dashboard-builder').DashboardConfig | null}
-              metrics={strategyMetrics ?? null}
-            />
+            <>
+              {strategyMetrics && (
+                <StrategyInsights
+                  totals={strategyMetrics.totals}
+                  objective={strategyInfo?.objective}
+                  budget={strategyInfo?.budget}
+                />
+              )}
+              <DashboardBuilder
+                strategyId={strategyId}
+                initialConfig={strategyInfo?.dashboardConfig as import('@/components/dashboard-builder').DashboardConfig | null}
+                metrics={strategyMetrics ?? null}
+                objective={strategyInfo?.objective}
+              />
+            </>
           )}
         </div>
       )}
