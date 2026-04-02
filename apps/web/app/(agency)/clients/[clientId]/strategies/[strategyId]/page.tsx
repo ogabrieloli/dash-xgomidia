@@ -181,8 +181,16 @@ export default function StrategyDashboardPage() {
     enabled: !!selectedAccountId,
     queryFn: async () => {
       const res = await api.get<{ data: { rows: MetricRow[]; totals: MetricsTotals } }>(
-        '/api/metrics',
-        { params: { adAccountId: selectedAccountId, clientId, dateFrom: dateRange.from, dateTo: dateRange.to } },
+        '/api/metrics/strategy',
+        {
+          params: {
+            strategyId,
+            adAccountId: selectedAccountId,
+            clientId,
+            dateFrom: dateRange.from,
+            dateTo: dateRange.to
+          }
+        },
       )
       return res.data.data
     },
@@ -275,11 +283,10 @@ export default function StrategyDashboardPage() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === tab.id
-                ? 'border-primary text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.id
+              ? 'border-primary text-foreground'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
           >
             {tab.label}
           </button>
@@ -296,11 +303,10 @@ export default function StrategyDashboardPage() {
                 <button
                   key={acc.id}
                   onClick={() => setActiveAccountId(acc.id)}
-                  className={`rounded-md px-3 py-1.5 text-xs font-medium border transition-colors ${
-                    selectedAccountId === acc.id
-                      ? 'bg-primary text-primary-foreground border-primary'
-                      : 'bg-background border-input hover:bg-accent'
-                  }`}
+                  className={`rounded-md px-3 py-1.5 text-xs font-medium border transition-colors ${selectedAccountId === acc.id
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-background border-input hover:bg-accent'
+                    }`}
                 >
                   {acc.name}
                 </button>
@@ -424,7 +430,15 @@ export default function StrategyDashboardPage() {
 
           {!isLoading && selectedAccountId && (metrics?.rows ?? []).length === 0 && (
             <div className="rounded-lg border border-dashed bg-card p-12 text-center">
-              <p className="text-sm text-muted-foreground">Nenhuma métrica para o período selecionado.</p>
+              <p className="text-sm text-muted-foreground mb-4">Nenhuma métrica para o período selecionado.</p>
+              <button
+                onClick={() => syncMutation.mutate(selectedAccountId)}
+                disabled={syncMutation.isPending}
+                className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm hover:bg-accent transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`h-4 w-4 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
+                {syncMutation.isPending ? 'Sincronizando...' : 'Sincronizar conta agora'}
+              </button>
             </div>
           )}
 
@@ -448,11 +462,10 @@ export default function StrategyDashboardPage() {
                   <button
                     key={acc.id}
                     onClick={() => setCampaignAccountId(acc.id)}
-                    className={`rounded-md px-3 py-1.5 text-xs font-medium border transition-colors ${
-                      selectedCampaignAccountId === acc.id
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'bg-background border-input hover:bg-accent'
-                    }`}
+                    className={`rounded-md px-3 py-1.5 text-xs font-medium border transition-colors ${selectedCampaignAccountId === acc.id
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-background border-input hover:bg-accent'
+                      }`}
                   >
                     {acc.name}
                   </button>
@@ -492,11 +505,10 @@ export default function StrategyDashboardPage() {
                           <p className="text-xs text-muted-foreground">{campaign.id}</p>
                         </td>
                         <td className="px-4 py-3 hidden sm:table-cell">
-                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                            campaign.status === 'ACTIVE'
-                              ? 'bg-green-500/15 text-green-600'
-                              : 'bg-muted text-muted-foreground'
-                          }`}>
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${campaign.status === 'ACTIVE'
+                            ? 'bg-green-500/15 text-green-600'
+                            : 'bg-muted text-muted-foreground'
+                            }`}>
                             {campaign.status}
                           </span>
                         </td>
@@ -513,11 +525,10 @@ export default function StrategyDashboardPage() {
                               }
                             }}
                             disabled={linkCampaignMutation.isPending || unlinkCampaignMutation.isPending}
-                            className={`inline-flex items-center justify-center h-6 w-6 rounded border transition-colors ${
-                              isLinked
-                                ? 'bg-primary border-primary text-primary-foreground'
-                                : 'border-input bg-background hover:bg-accent'
-                            }`}
+                            className={`inline-flex items-center justify-center h-6 w-6 rounded border transition-colors ${isLinked
+                              ? 'bg-primary border-primary text-primary-foreground'
+                              : 'border-input bg-background hover:bg-accent'
+                              }`}
                           >
                             {isLinked && <Check className="h-3.5 w-3.5" />}
                           </button>

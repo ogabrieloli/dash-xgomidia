@@ -134,6 +134,7 @@ export async function metricsRoutes(app: FastifyInstance) {
     const query = DateRangeQuerySchema.extend({
       strategyId: z.string().uuid(),
       clientId: z.string().uuid(),
+      adAccountId: z.string().uuid().optional(),
     }).parse(request.query)
 
     await assertClientAccess(request.user.sub, request.user.role, query.clientId, app.db)
@@ -141,7 +142,7 @@ export async function metricsRoutes(app: FastifyInstance) {
     const result = await service.getByStrategy(query.strategyId, query.clientId, {
       from: query.dateFrom,
       to: query.dateTo,
-    })
+    }, query.adAccountId)
 
     return {
       data: {

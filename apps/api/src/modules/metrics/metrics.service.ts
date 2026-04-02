@@ -146,7 +146,7 @@ function snapshotsToRows(
 }
 
 export class MetricsService {
-  constructor(private readonly db: PrismaClient) {}
+  constructor(private readonly db: PrismaClient) { }
 
   async getByAdAccount(adAccountId: string, dateRange: DateRange): Promise<MetricsResult> {
     const snapshots = await this.db.metricSnapshot.findMany({
@@ -276,17 +276,20 @@ export class MetricsService {
   /**
    * Busca métricas de uma estratégia.
    * Se a estratégia tiver campanhas vinculadas, filtra por `externalCampaignId`.
-   * Caso contrário, retorna todas as métricas das contas do cliente.
+   * Permite filtrar opcionalmente por uma conta específica.
    */
-  async getByStrategy(strategyId: string, clientId: string, dateRange: DateRange): Promise<MetricsResult> {
+  async getByStrategy(strategyId: string, clientId: string, dateRange: DateRange, adAccountId?: string): Promise<MetricsResult> {
     // Campanhas vinculadas à estratégia
     const linkedCampaigns = await this.db.strategyCampaign.findMany({
-      where: { strategyId },
+      where: {
+        strategyId,
+        ...(adAccountId && { adAccountId })
+      },
       select: { externalId: true, adAccountId: true },
     })
 
     const accounts = await this.db.adAccount.findMany({
-      where: { clientId },
+      where: { clientId, ...(adAccountId && { id: adAccountId }) },
       select: { id: true },
     })
 
@@ -297,14 +300,14 @@ export class MetricsService {
 
     const where = linkedCampaigns.length > 0
       ? {
-          adAccountId: { in: linkedCampaigns.map((c) => c.adAccountId) },
-          externalCampaignId: { in: linkedCampaigns.map((c) => c.externalId) },
-          date: { gte: new Date(dateRange.from), lte: new Date(dateRange.to) },
-        }
+        adAccountId: { in: linkedCampaigns.map((c) => c.adAccountId) },
+        externalCampaignId: { in: linkedCampaigns.map((c) => c.externalId) },
+        date: { gte: new Date(dateRange.from), lte: new Date(dateRange.to) },
+      }
       : {
-          adAccountId: { in: accountIds },
-          date: { gte: new Date(dateRange.from), lte: new Date(dateRange.to) },
-        }
+        adAccountId: { in: accountIds },
+        date: { gte: new Date(dateRange.from), lte: new Date(dateRange.to) },
+      }
 
     const snapshots = await this.db.metricSnapshot.findMany({ where, orderBy: { date: 'asc' } })
     const rows = snapshotsToRows(snapshots)

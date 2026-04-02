@@ -13,6 +13,9 @@ import {
 import { AdAccountsService } from '../ad-accounts/ad-accounts.service.js'
 import { authenticate, requireRole } from '../../shared/middleware/auth.middleware.js'
 import { AppError } from '../../shared/errors/index.js'
+import { Queue } from 'bullmq'
+import { QUEUES, type MetaAdsSyncJob } from '@xgo/shared-types'
+import { format, subDays } from 'date-fns'
 
 const META_API_VERSION = 'v19.0'
 const META_GRAPH_URL = `https://graph.facebook.com/${META_API_VERSION}`
@@ -254,7 +257,7 @@ export async function metaOAuthRoutes(app: FastifyInstance) {
         expiresAt: new Date(tokenData.expiresAt),
       })
 
-      await adAccountsService.create({
+      const account = await adAccountsService.create({
         platform: 'META_ADS',
         externalId: acc.id,
         name: acc.name,
@@ -262,7 +265,31 @@ export async function metaOAuthRoutes(app: FastifyInstance) {
         currency: acc.currency,
         timezone: acc.timezone_name,
       }, pending.clientId, pending.userId).catch(() => null)
-      connectedCount++
+
+      if (account) {
+        connectedCount++
+
+        // Enfileirar sync inicial (30 dias)
+        const queue = new Queue(QUEUES.META_ADS_SYNC, {
+          connection: { url: process.env['REDIS_URL'] ?? 'redis://localhost:6379' },
+        })
+
+        const today = new Date()
+        await queue.add('sync', {
+          adAccountId: account.id,
+          clientId: pending.clientId,
+          dateRange: {
+            from: format(subDays(today, 30), 'yyyy-MM-dd'),
+            to: format(today, 'yyyy-MM-dd'),
+          },
+          triggeredBy: 'initial_sync',
+        }, {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 60_000 }
+        }).catch(err => app.log.error({ err, adAccountId: account.id }, 'Erro ao enfileirar sync inicial'))
+
+        await queue.close()
+      }
     }
 
     await (app.db as any).pendingMetaConnection.delete({ where: { id } }).catch(() => null)
