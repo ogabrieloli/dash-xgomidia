@@ -81,36 +81,36 @@ interface Strategy {
 // ─── Default metric sets by objective ─────────────────────────────────────────
 
 const DEFAULT_KPI_METRICS: Record<string, string[]> = {
-  LEAD:     ['spend', 'leads', 'cpl', 'ctr', 'conversionRate'],
-  SALES:    ['spend', 'revenue', 'roas', 'purchases', 'costPerPurchase'],
+  LEAD: ['spend', 'leads', 'cpl', 'ctr', 'conversionRate'],
+  SALES: ['spend', 'revenue', 'roas', 'purchases', 'costPerPurchase'],
   BRANDING: ['spend', 'reach', 'impressions', 'cpm', 'frequency'],
   _default: ['spend', 'revenue', 'roas', 'conversions', 'ctr'],
 }
 
 const DEFAULT_FUNNEL_METRICS: Record<string, string[]> = {
-  LEAD:     ['impressions', 'clicks', 'landingPageViews', 'leads', 'conversions'],
-  SALES:    ['impressions', 'clicks', 'addToCart', 'initiateCheckout', 'purchases'],
+  LEAD: ['impressions', 'clicks', 'landingPageViews', 'leads', 'conversions'],
+  SALES: ['impressions', 'clicks', 'addToCart', 'initiateCheckout', 'purchases'],
   BRANDING: ['reach', 'impressions', 'clicks', 'postEngagement', 'videoViews3s'],
   _default: ['impressions', 'clicks', 'conversions'],
 }
 
 const DEFAULT_CAMPAIGN_COLUMNS: Record<string, string[]> = {
-  LEAD:     ['spend', 'leads', 'cpl', 'ctr'],
-  SALES:    ['spend', 'purchases', 'costPerPurchase', 'roas'],
+  LEAD: ['spend', 'leads', 'cpl', 'ctr'],
+  SALES: ['spend', 'purchases', 'costPerPurchase', 'roas'],
   BRANDING: ['spend', 'reach', 'impressions', 'cpm'],
   _default: ['spend', 'roas', 'ctr'],
 }
 
 const DEFAULT_AREA_METRICS: Record<string, string[]> = {
-  LEAD:     ['spend', 'leads'],
-  SALES:    ['spend', 'revenue'],
+  LEAD: ['spend', 'leads'],
+  SALES: ['spend', 'revenue'],
   BRANDING: ['spend', 'impressions'],
   _default: ['spend', 'revenue'],
 }
 
 const DEFAULT_BAR_METRIC: Record<string, string> = {
-  LEAD:     'cpl',
-  SALES:    'roas',
+  LEAD: 'cpl',
+  SALES: 'roas',
   BRANDING: 'cpm',
   _default: 'roas',
 }
@@ -538,6 +538,35 @@ export default function StrategyDashboardPage() {
     },
   })
 
+  const strategyInfo = strategyData?.strategy
+  const projectInfo = strategyData?.project
+
+  const savedConfig = (strategyInfo?.metricConfig ?? {}) as MetricConfig
+  const goals = savedConfig as Pick<MetricConfig, 'goalRoas' | 'goalCpl' | 'goalCpa' | 'goalCostPerPurchase'>
+  const objective = strategyInfo?.objective ?? null
+  const objectiveKey = objective ?? '_default'
+  const kpiMetrics = savedConfig.kpiMetrics ?? DEFAULT_KPI_METRICS[objectiveKey] ?? DEFAULT_KPI_METRICS._default
+  const funnelMetrics = savedConfig.funnelMetrics ?? DEFAULT_FUNNEL_METRICS[objectiveKey] ?? DEFAULT_FUNNEL_METRICS._default
+  const campaignColumns = savedConfig.campaignColumns ?? DEFAULT_CAMPAIGN_COLUMNS[objectiveKey] ?? DEFAULT_CAMPAIGN_COLUMNS._default
+  const areaMetrics = savedConfig.areaMetrics ?? DEFAULT_AREA_METRICS[objectiveKey] ?? DEFAULT_AREA_METRICS._default
+  const barMetric = savedConfig.barMetric ?? DEFAULT_BAR_METRIC[objectiveKey] ?? DEFAULT_BAR_METRIC._default
+  const dailyColumns = savedConfig.dailyColumns ?? DEFAULT_DAILY_COLUMNS
+
+  const saveMetricConfigMutation = useMutation({
+    mutationFn: async (patch: Partial<MetricConfig>) => {
+      const current = (strategyInfo?.metricConfig ?? {}) as Record<string, unknown>
+      await api.patch(`/api/strategies/${strategyId}/metric-config`, {
+        metricConfig: { ...current, ...patch },
+      })
+    },
+    onSuccess: (_data, patch) => {
+      void queryClient.invalidateQueries({ queryKey: ['strategy', strategyId] })
+      if ('goalRoas' in patch || 'goalCpl' in patch || 'goalCpa' in patch || 'goalCostPerPurchase' in patch) {
+        setShowGoalForm(false)
+      }
+    },
+  })
+
   const totals = metrics?.totals
   const prev = metrics?.previousTotals
   const spend = parseFloat(totals?.spend ?? '0')
@@ -569,35 +598,6 @@ export default function StrategyDashboardPage() {
     else annotationMap.set(label, [entry.title])
   }
   const annotations = Array.from(annotationMap.entries()).map(([date, titles]) => ({ date, label: titles.join(' · ') }))
-
-  const strategyInfo = strategyData?.strategy
-  const projectInfo = strategyData?.project
-
-  const saveMetricConfigMutation = useMutation({
-    mutationFn: async (patch: Partial<MetricConfig>) => {
-      const current = (strategyInfo?.metricConfig ?? {}) as Record<string, unknown>
-      await api.patch(`/api/strategies/${strategyId}/metric-config`, {
-        metricConfig: { ...current, ...patch },
-      })
-    },
-    onSuccess: (_data, patch) => {
-      void queryClient.invalidateQueries({ queryKey: ['strategy', strategyId] })
-      if ('goalRoas' in patch || 'goalCpl' in patch || 'goalCpa' in patch || 'goalCostPerPurchase' in patch) {
-        setShowGoalForm(false)
-      }
-    },
-  })
-
-  const savedConfig = (strategyInfo?.metricConfig ?? {}) as MetricConfig
-  const goals = savedConfig as Pick<MetricConfig, 'goalRoas' | 'goalCpl' | 'goalCpa' | 'goalCostPerPurchase'>
-  const objective = strategyInfo?.objective ?? null
-  const objectiveKey = objective ?? '_default'
-  const kpiMetrics = savedConfig.kpiMetrics ?? DEFAULT_KPI_METRICS[objectiveKey] ?? DEFAULT_KPI_METRICS._default
-  const funnelMetrics = savedConfig.funnelMetrics ?? DEFAULT_FUNNEL_METRICS[objectiveKey] ?? DEFAULT_FUNNEL_METRICS._default
-  const campaignColumns = savedConfig.campaignColumns ?? DEFAULT_CAMPAIGN_COLUMNS[objectiveKey] ?? DEFAULT_CAMPAIGN_COLUMNS._default
-  const areaMetrics = savedConfig.areaMetrics ?? DEFAULT_AREA_METRICS[objectiveKey] ?? DEFAULT_AREA_METRICS._default
-  const barMetric = savedConfig.barMetric ?? DEFAULT_BAR_METRIC[objectiveKey] ?? DEFAULT_BAR_METRIC._default
-  const dailyColumns = savedConfig.dailyColumns ?? DEFAULT_DAILY_COLUMNS
 
   const linkedIds = new Set(linkedCampaigns?.map((c) => c.externalId) ?? [])
 
@@ -1163,11 +1163,10 @@ export default function StrategyDashboardPage() {
             </p>
             <button
               onClick={() => setEditingCampaigns((v) => !v)}
-              className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs font-medium transition-colors ${
-                editingCampaigns
-                  ? 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
-                  : 'border-input bg-background text-muted-foreground hover:text-foreground hover:bg-accent'
-              }`}
+              className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs font-medium transition-colors ${editingCampaigns
+                ? 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
+                : 'border-input bg-background text-muted-foreground hover:text-foreground hover:bg-accent'
+                }`}
             >
               {editingCampaigns ? <Check className="h-3.5 w-3.5" /> : <Edit2 className="h-3.5 w-3.5" />}
               {editingCampaigns ? 'Concluir' : 'Editar seleção'}
@@ -1220,116 +1219,116 @@ export default function StrategyDashboardPage() {
           {/* Modo edição: lista completa de campanhas disponíveis */}
           {editingCampaigns && (
             <>
-          <div>
-            {/* Account selector */}
-            {accounts && accounts.length > 0 && (
-              <div className="flex items-center gap-2 mb-4">
-                <span className="text-xs text-muted-foreground">Conta:</span>
-                {accounts.filter((a) => a.platform === 'META_ADS').map((acc) => (
-                  <button
-                    key={acc.id}
-                    onClick={() => setCampaignAccountId(acc.id)}
-                    className={`rounded-md px-3 py-1.5 text-xs font-medium border transition-colors ${selectedCampaignAccountId === acc.id
-                      ? 'bg-primary text-primary-foreground border-primary'
-                      : 'bg-background border-input hover:bg-accent'
-                      }`}
-                  >
-                    {acc.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Campaigns list */}
-          {loadingCampaigns ? (
-            <div className="flex items-center gap-2 py-8 justify-center text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="text-sm">Carregando campanhas...</span>
-            </div>
-          ) : !metaCampaigns || metaCampaigns.length === 0 ? (
-            <div className="rounded-lg border border-dashed bg-card p-8 text-center">
-              <p className="text-sm text-muted-foreground">Nenhuma campanha encontrada nesta conta.</p>
-            </div>
-          ) : (
-            <div className="rounded-lg border bg-card overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40">
-                  <tr>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Campanha</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground hidden sm:table-cell">Status</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground hidden md:table-cell">Objetivo</th>
-                    <th className="text-center px-4 py-3 text-xs font-medium text-muted-foreground">Vinculada</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {metaCampaigns.map((campaign) => {
-                    const isLinked = linkedIds.has(campaign.id)
-                    return (
-                      <tr key={campaign.id} className="hover:bg-accent/20 transition-colors">
-                        <td className="px-4 py-3">
-                          <p className="font-medium text-foreground">{campaign.name}</p>
-                          <p className="text-xs text-muted-foreground">{campaign.id}</p>
-                        </td>
-                        <td className="px-4 py-3 hidden sm:table-cell">
-                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${campaign.status === 'ACTIVE'
-                            ? 'bg-green-500/15 text-green-600'
-                            : 'bg-muted text-muted-foreground'
-                            }`}>
-                            {campaign.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 hidden md:table-cell text-muted-foreground text-xs">
-                          {campaign.objective ?? '—'}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <button
-                            onClick={() => {
-                              if (isLinked) {
-                                unlinkCampaignMutation.mutate(campaign.id)
-                              } else {
-                                linkCampaignMutation.mutate(campaign)
-                              }
-                            }}
-                            disabled={linkCampaignMutation.isPending || unlinkCampaignMutation.isPending}
-                            className={`inline-flex items-center justify-center h-6 w-6 rounded border transition-colors ${isLinked
-                              ? 'bg-primary border-primary text-primary-foreground'
-                              : 'border-input bg-background hover:bg-accent'
-                              }`}
-                          >
-                            {isLinked && <Check className="h-3.5 w-3.5" />}
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Sync manual */}
-          {accounts && accounts.filter((a) => a.platform === 'META_ADS').length > 0 && (
-            <div className="rounded-lg border bg-card p-4 flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-foreground">Sincronizar métricas agora</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Busca os dados mais recentes do Meta Ads para todas as contas conectadas.</p>
+                {/* Account selector */}
+                {accounts && accounts.length > 0 && (
+                  <div className="flex items-center gap-2 mb-4">
+                    <span className="text-xs text-muted-foreground">Conta:</span>
+                    {accounts.filter((a) => a.platform === 'META_ADS').map((acc) => (
+                      <button
+                        key={acc.id}
+                        onClick={() => setCampaignAccountId(acc.id)}
+                        className={`rounded-md px-3 py-1.5 text-xs font-medium border transition-colors ${selectedCampaignAccountId === acc.id
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'bg-background border-input hover:bg-accent'
+                          }`}
+                      >
+                        {acc.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-              <button
-                onClick={() => {
-                  const metaAccounts = accounts?.filter((a) => a.platform === 'META_ADS') ?? []
-                  for (const acc of metaAccounts) {
-                    syncMutation.mutate(acc.id)
-                  }
-                }}
-                disabled={syncMutation.isPending}
-                className="flex items-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm hover:bg-accent transition-colors disabled:opacity-50"
-              >
-                <RefreshCw className={`h-4 w-4 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
-                {syncMutation.isPending ? 'Sincronizando...' : syncMutation.isSuccess ? 'Sincronizado!' : 'Sincronizar'}
-              </button>
-            </div>
-          )}
+
+              {/* Campaigns list */}
+              {loadingCampaigns ? (
+                <div className="flex items-center gap-2 py-8 justify-center text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">Carregando campanhas...</span>
+                </div>
+              ) : !metaCampaigns || metaCampaigns.length === 0 ? (
+                <div className="rounded-lg border border-dashed bg-card p-8 text-center">
+                  <p className="text-sm text-muted-foreground">Nenhuma campanha encontrada nesta conta.</p>
+                </div>
+              ) : (
+                <div className="rounded-lg border bg-card overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/40">
+                      <tr>
+                        <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Campanha</th>
+                        <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground hidden sm:table-cell">Status</th>
+                        <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground hidden md:table-cell">Objetivo</th>
+                        <th className="text-center px-4 py-3 text-xs font-medium text-muted-foreground">Vinculada</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {metaCampaigns.map((campaign) => {
+                        const isLinked = linkedIds.has(campaign.id)
+                        return (
+                          <tr key={campaign.id} className="hover:bg-accent/20 transition-colors">
+                            <td className="px-4 py-3">
+                              <p className="font-medium text-foreground">{campaign.name}</p>
+                              <p className="text-xs text-muted-foreground">{campaign.id}</p>
+                            </td>
+                            <td className="px-4 py-3 hidden sm:table-cell">
+                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${campaign.status === 'ACTIVE'
+                                ? 'bg-green-500/15 text-green-600'
+                                : 'bg-muted text-muted-foreground'
+                                }`}>
+                                {campaign.status}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 hidden md:table-cell text-muted-foreground text-xs">
+                              {campaign.objective ?? '—'}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <button
+                                onClick={() => {
+                                  if (isLinked) {
+                                    unlinkCampaignMutation.mutate(campaign.id)
+                                  } else {
+                                    linkCampaignMutation.mutate(campaign)
+                                  }
+                                }}
+                                disabled={linkCampaignMutation.isPending || unlinkCampaignMutation.isPending}
+                                className={`inline-flex items-center justify-center h-6 w-6 rounded border transition-colors ${isLinked
+                                  ? 'bg-primary border-primary text-primary-foreground'
+                                  : 'border-input bg-background hover:bg-accent'
+                                  }`}
+                              >
+                                {isLinked && <Check className="h-3.5 w-3.5" />}
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Sync manual */}
+              {accounts && accounts.filter((a) => a.platform === 'META_ADS').length > 0 && (
+                <div className="rounded-lg border bg-card p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Sincronizar métricas agora</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Busca os dados mais recentes do Meta Ads para todas as contas conectadas.</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const metaAccounts = accounts?.filter((a) => a.platform === 'META_ADS') ?? []
+                      for (const acc of metaAccounts) {
+                        syncMutation.mutate(acc.id)
+                      }
+                    }}
+                    disabled={syncMutation.isPending}
+                    className="flex items-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm hover:bg-accent transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
+                    {syncMutation.isPending ? 'Sincronizando...' : syncMutation.isSuccess ? 'Sincronizado!' : 'Sincronizar'}
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>
