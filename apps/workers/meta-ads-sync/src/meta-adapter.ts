@@ -21,10 +21,12 @@ interface MetaInsightRow {
   impressions: string
   clicks: string
   spend: string
+  reach?: string
   campaign_id?: string
   campaign_name?: string
   actions?: Array<{ action_type: string; value: string }>
   action_values?: Array<{ action_type: string; value: string }>
+  video_thruplay_watched_actions?: Array<{ action_type: string; value: string }>
 }
 
 interface MetaInsightsResponse {
@@ -107,6 +109,15 @@ export class MetaAdapter implements PlatformAdapter {
           metric.revenue = revenue
         }
 
+        if (row.reach !== undefined) {
+          metric.reach = parseInt(row.reach, 10) || 0
+        }
+
+        const videoViews = extractActionValue(row.video_thruplay_watched_actions, 'video_view')
+        if (videoViews > 0) {
+          metric.videoViews = videoViews
+        }
+
         if (row.campaign_id) {
           metric.externalCampaignId = row.campaign_id
           if (row.campaign_name !== undefined) {
@@ -176,8 +187,10 @@ export class MetaAdapter implements PlatformAdapter {
       'impressions',
       'clicks',
       'spend',
+      'reach',
       'actions',
       'action_values',
+      'video_thruplay_watched_actions',
     ]
 
     if (level === 'campaign') {

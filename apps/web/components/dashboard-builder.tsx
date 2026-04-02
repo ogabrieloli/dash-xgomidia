@@ -3,15 +3,28 @@
 import { useState, useCallback } from 'react'
 import dynamic from 'next/dynamic'
 import { useMutation } from '@tanstack/react-query'
-import { Plus, Save, Trash2, GripVertical } from 'lucide-react'
+import { Plus, Save, Trash2, GripVertical, Pencil, LayoutDashboard } from 'lucide-react'
+import {
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts'
 import { api } from '@/lib/api'
+import { formatCurrency, formatNumber, formatPercent } from '@/lib/utils'
 import type { LayoutItem, Layout } from 'react-grid-layout'
 
-// Dynamic import to avoid SSR issues
 const GridLayout = dynamic(
   () => import('react-grid-layout').then((mod) => mod.GridLayout),
   { ssr: false },
 )
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface DashboardWidget {
   id: string
@@ -25,38 +38,253 @@ export interface DashboardConfig {
   widgets: DashboardWidget[]
 }
 
-const WIDGET_TYPES: Array<{ type: DashboardWidget['type']; label: string }> = [
-  { type: 'kpi', label: 'KPI' },
-  { type: 'area_chart', label: 'Gráfico de Área' },
-  { type: 'bar_chart', label: 'Gráfico de Barras' },
-]
+interface DerivedMetrics {
+  ctr: number; cpc: number; cpa: number; roas: number; cpm: number
+}
 
-const METRIC_OPTIONS = [
-  { value: 'spend', label: 'Investimento' },
-  { value: 'revenue', label: 'Receita' },
-  { value: 'roas', label: 'ROAS' },
-  { value: 'cpa', label: 'CPA' },
-  { value: 'ctr', label: 'CTR' },
-  { value: 'impressions', label: 'Impressões' },
-  { value: 'clicks', label: 'Cliques' },
-  { value: 'conversions', label: 'Conversões' },
-]
+interface MetricRow {
+  date: string
+  impressions: number
+  clicks: number
+  spend: string
+  conversions: number
+  revenue: string | null
+  reach?: number
+  videoViews?: number
+  derived: DerivedMetrics
+}
 
-const DEFAULT_WIDGET_SIZE: Record<DashboardWidget['type'], { w: number; h: number }> = {
-  kpi: { w: 3, h: 2 },
-  area_chart: { w: 6, h: 4 },
-  bar_chart: { w: 6, h: 4 },
+interface MetricTotals {
+  impressions: number
+  clicks: number
+  spend: string
+  conversions: number
+  revenue: string
+  reach?: number
+  videoViews?: number
+  derived: DerivedMetrics
 }
 
 interface DashboardBuilderProps {
   strategyId: string
   initialConfig?: DashboardConfig | null
+  metrics?: { rows: MetricRow[]; totals: MetricTotals } | null
 }
 
-export function DashboardBuilder({ strategyId, initialConfig }: DashboardBuilderProps) {
+// ─── Metric config ─────────────────────────────────────────────────────────────
+
+export const METRIC_OPTIONS = [
+  { value: 'spend',       label: 'Investimento',   format: 'currency' },
+  { value: 'revenue',     label: 'Receita',         format: 'currency' },
+  { value: 'roas',        label: 'ROAS',            format: 'roas'     },
+  { value: 'ctr',         label: 'CTR',             format: 'percent'  },
+  { value: 'cpc',         label: 'CPC',             format: 'currency' },
+  { value: 'cpa',         label: 'CPA',             format: 'currency' },
+  { value: 'cpm',         label: 'CPM',             format: 'currency' },
+  { value: 'impressions', label: 'Impressões',      format: 'number'   },
+  { value: 'clicks',      label: 'Cliques',         format: 'number'   },
+  { value: 'conversions', label: 'Conversões',      format: 'number'   },
+  { value: 'reach',       label: 'Alcance',         format: 'number'   },
+  { value: 'frequency',   label: 'Frequência',      format: 'number'   },
+  { value: 'videoViews',  label: 'Views de Vídeo',  format: 'number'   },
+]
+
+const METRIC_PRESETS = [
+  {
+    id: 'visibilidade',
+    label: 'Visibilidade',
+    color: 'bg-purple-500/10 text-purple-700 border-purple-200',
+    widgets: [
+      { type: 'kpi' as const, metric: 'impressions' },
+      { type: 'kpi' as const, metric: 'reach'       },
+      { type: 'kpi' as const, metric: 'frequency'   },
+      { type: 'kpi' as const, metric: 'cpm'         },
+    ],
+  },
+  {
+    id: 'performance',
+    label: 'Performance',
+    color: 'bg-blue-500/10 text-blue-700 border-blue-200',
+    widgets: [
+      { type: 'kpi' as const,       metric: 'clicks'  },
+      { type: 'kpi' as const,       metric: 'ctr'     },
+      { type: 'kpi' as const,       metric: 'cpc'     },
+      { type: 'area_chart' as const, metric: 'spend'  },
+    ],
+  },
+  {
+    id: 'conversao',
+    label: 'Conversão',
+    color: 'bg-green-500/10 text-green-700 border-green-200',
+    widgets: [
+      { type: 'kpi' as const, metric: 'conversions' },
+      { type: 'kpi' as const, metric: 'cpa'         },
+      { type: 'kpi' as const, metric: 'revenue'     },
+      { type: 'kpi' as const, metric: 'roas'        },
+    ],
+  },
+]
+
+const DEFAULT_WIDGET_SIZE: Record<DashboardWidget['type'], { w: number; h: number }> = {
+  kpi:        { w: 3, h: 2 },
+  area_chart: { w: 6, h: 4 },
+  bar_chart:  { w: 6, h: 4 },
+}
+
+// ─── Value helpers ─────────────────────────────────────────────────────────────
+
+function getMetricValue(metric: string, totals: MetricTotals): string {
+  const d = totals.derived
+  switch (metric) {
+    case 'spend':       return formatCurrency(parseFloat(totals.spend))
+    case 'revenue':     return formatCurrency(parseFloat(totals.revenue ?? '0'))
+    case 'roas':        return `${d.roas.toFixed(2)}x`
+    case 'ctr':         return formatPercent(d.ctr)
+    case 'cpc':         return formatCurrency(d.cpc)
+    case 'cpa':         return formatCurrency(d.cpa)
+    case 'cpm':         return formatCurrency(d.cpm)
+    case 'impressions': return formatNumber(totals.impressions)
+    case 'clicks':      return formatNumber(totals.clicks)
+    case 'conversions': return formatNumber(totals.conversions)
+    case 'reach':       return formatNumber(totals.reach ?? 0)
+    case 'frequency':   return totals.reach ? (totals.impressions / totals.reach).toFixed(2) : '—'
+    case 'videoViews':  return formatNumber(totals.videoViews ?? 0)
+    default:            return '—'
+  }
+}
+
+function getChartValue(row: MetricRow, metric: string): number {
+  const d = row.derived
+  switch (metric) {
+    case 'spend':       return parseFloat(row.spend)
+    case 'revenue':     return parseFloat(row.revenue ?? '0')
+    case 'roas':        return d.roas
+    case 'ctr':         return d.ctr
+    case 'cpc':         return d.cpc
+    case 'cpa':         return d.cpa
+    case 'cpm':         return d.cpm
+    case 'impressions': return row.impressions
+    case 'clicks':      return row.clicks
+    case 'conversions': return row.conversions
+    case 'reach':       return row.reach ?? 0
+    case 'videoViews':  return row.videoViews ?? 0
+    default:            return 0
+  }
+}
+
+function formatChartTick(metric: string, v: number): string {
+  const opt = METRIC_OPTIONS.find((m) => m.value === metric)
+  switch (opt?.format) {
+    case 'currency': return `R$${(v / 1000).toFixed(0)}k`
+    case 'percent':  return `${(v * 100).toFixed(0)}%`
+    case 'roas':     return `${v.toFixed(1)}x`
+    default:         return v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)
+  }
+}
+
+function formatTooltipValue(metric: string, v: number): string {
+  const opt = METRIC_OPTIONS.find((m) => m.value === metric)
+  switch (opt?.format) {
+    case 'currency': return formatCurrency(v)
+    case 'percent':  return formatPercent(v)
+    case 'roas':     return `${v.toFixed(2)}x`
+    default:         return formatNumber(v)
+  }
+}
+
+// ─── Widget renderers ──────────────────────────────────────────────────────────
+
+function KpiWidget({ widget, metrics }: { widget: DashboardWidget; metrics?: { totals: MetricTotals } | null }) {
+  const value = metrics ? getMetricValue(widget.metric, metrics.totals) : null
+  return (
+    <div className="flex flex-col justify-center h-full px-4 py-2">
+      <p className="text-xs text-muted-foreground mb-1">{widget.label}</p>
+      {value !== null ? (
+        <p className="text-2xl font-bold text-foreground tabular-nums">{value}</p>
+      ) : (
+        <p className="text-2xl font-bold text-muted-foreground/40">—</p>
+      )}
+    </div>
+  )
+}
+
+function ChartWidget({
+  widget,
+  metrics,
+  type,
+}: {
+  widget: DashboardWidget
+  metrics?: { rows: MetricRow[] } | null
+  type: 'area' | 'bar'
+}) {
+  const chartData = (metrics?.rows ?? [])
+    .slice()
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((r) => ({
+      date: r.date.slice(5), // MM-DD
+      value: getChartValue(r, widget.metric),
+    }))
+
+  if (!metrics || chartData.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <p className="text-xs text-muted-foreground/40 italic">Sem dados para o período</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex-1 px-1 pb-2 min-h-0">
+      <ResponsiveContainer width="100%" height="100%">
+        {type === 'area' ? (
+          <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+            <defs>
+              <linearGradient id={`grad-${widget.id}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+            <XAxis dataKey="date" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
+            <YAxis tick={{ fontSize: 9 }} tickFormatter={(v: number) => formatChartTick(widget.metric, v)} width={40} />
+            <Tooltip
+              formatter={(v: number) => [formatTooltipValue(widget.metric, v), widget.label]}
+              contentStyle={{ fontSize: 11 }}
+            />
+            <Area
+              type="monotone"
+              dataKey="value"
+              stroke="hsl(var(--primary))"
+              fill={`url(#grad-${widget.id})`}
+              strokeWidth={2}
+            />
+          </AreaChart>
+        ) : (
+          <BarChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+            <XAxis dataKey="date" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
+            <YAxis tick={{ fontSize: 9 }} tickFormatter={(v: number) => formatChartTick(widget.metric, v)} width={40} />
+            <Tooltip
+              formatter={(v: number) => [formatTooltipValue(widget.metric, v), widget.label]}
+              contentStyle={{ fontSize: 11 }}
+            />
+            <Bar dataKey="value" fill="hsl(var(--primary))" radius={[2, 2, 0, 0]} />
+          </BarChart>
+        )}
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+// ─── Main component ────────────────────────────────────────────────────────────
+
+export function DashboardBuilder({ strategyId, initialConfig, metrics }: DashboardBuilderProps) {
   const [widgets, setWidgets] = useState<DashboardWidget[]>(initialConfig?.widgets ?? [])
   const [layout, setLayout] = useState<LayoutItem[]>(initialConfig?.layout ?? [])
+  const [isEditing, setIsEditing] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [selectedMetric, setSelectedMetric] = useState('spend')
+  const [selectedType, setSelectedType] = useState<DashboardWidget['type']>('kpi')
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -66,6 +294,7 @@ export function DashboardBuilder({ strategyId, initialConfig }: DashboardBuilder
     },
     onSuccess: () => {
       setSaved(true)
+      setIsEditing(false)
       setTimeout(() => setSaved(false), 2000)
     },
   })
@@ -73,22 +302,27 @@ export function DashboardBuilder({ strategyId, initialConfig }: DashboardBuilder
   const addWidget = useCallback((type: DashboardWidget['type'], metric: string) => {
     const id = `widget-${Date.now()}`
     const size = DEFAULT_WIDGET_SIZE[type]
-    const newWidget: DashboardWidget = {
-      id,
-      type,
-      metric,
-      label: METRIC_OPTIONS.find((m) => m.value === metric)?.label ?? metric,
-    }
+    const label = METRIC_OPTIONS.find((m) => m.value === metric)?.label ?? metric
+    setWidgets((prev) => [...prev, { id, type, metric, label }])
+    setLayout((prev) => [...prev, { i: id, x: 0, y: Infinity, ...size }])
+  }, [])
 
-    const newLayoutItem: LayoutItem = {
-      i: id,
-      x: 0,
-      y: Infinity, // adds to bottom
-      ...size,
-    }
-
-    setWidgets((prev) => [...prev, newWidget])
-    setLayout((prev) => [...prev, newLayoutItem])
+  const addPreset = useCallback((preset: typeof METRIC_PRESETS[number]) => {
+    const now = Date.now()
+    const newWidgets: DashboardWidget[] = preset.widgets.map((w, i) => ({
+      id: `widget-${now}-${i}`,
+      type: w.type,
+      metric: w.metric,
+      label: METRIC_OPTIONS.find((m) => m.value === w.metric)?.label ?? w.metric,
+    }))
+    const newLayout: LayoutItem[] = newWidgets.map((w, i) => ({
+      i: w.id,
+      x: (i % 4) * 3,
+      y: Infinity,
+      ...DEFAULT_WIDGET_SIZE[w.type],
+    }))
+    setWidgets((prev) => [...prev, ...newWidgets])
+    setLayout((prev) => [...prev, ...newLayout])
   }, [])
 
   const removeWidget = useCallback((id: string) => {
@@ -100,54 +334,112 @@ export function DashboardBuilder({ strategyId, initialConfig }: DashboardBuilder
     setLayout([...newLayout])
   }, [])
 
+  const hasNoMetrics = !metrics || !metrics.totals
+
   return (
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex items-center gap-3 flex-wrap">
-        <span className="text-sm font-medium text-foreground">Adicionar widget:</span>
-        {WIDGET_TYPES.map((wt) => (
-          <div key={wt.type} className="flex items-center gap-1">
-            <select
-              className="rounded-md border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
-              defaultValue="spend"
-              id={`metric-select-${wt.type}`}
-            >
-              {METRIC_OPTIONS.map((m) => (
-                <option key={m.value} value={m.value}>{m.label}</option>
-              ))}
-            </select>
+        {!isEditing ? (
+          <>
             <button
-              onClick={() => {
-                const sel = document.getElementById(`metric-select-${wt.type}`) as HTMLSelectElement
-                addWidget(wt.type, sel.value)
-              }}
-              className="flex items-center gap-1 rounded-md border border-input bg-background px-2 py-1 text-xs hover:bg-accent transition-colors"
+              onClick={() => setIsEditing(true)}
+              className="flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-xs hover:bg-accent transition-colors"
             >
-              <Plus className="h-3 w-3" />
-              {wt.label}
+              <Pencil className="h-3 w-3" />
+              Editar layout
             </button>
-          </div>
-        ))}
+            {widgets.length > 0 && hasNoMetrics && (
+              <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded">
+                Sem dados para o período selecionado
+              </p>
+            )}
+          </>
+        ) : (
+          <>
+            {/* Preset buttons */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Presets:</span>
+              {METRIC_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  onClick={() => addPreset(preset)}
+                  className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors hover:opacity-80 ${preset.color}`}
+                >
+                  + {preset.label}
+                </button>
+              ))}
+            </div>
 
-        <button
-          onClick={() => saveMutation.mutate()}
-          disabled={saveMutation.isPending}
-          className={`ml-auto flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-            saved
-              ? 'bg-green-500/15 text-green-600'
-              : 'bg-primary text-primary-foreground hover:bg-primary/90'
-          } disabled:opacity-50`}
-        >
-          <Save className="h-3 w-3" />
-          {saved ? 'Salvo!' : saveMutation.isPending ? 'Salvando...' : 'Salvar layout'}
-        </button>
+            {/* Custom widget add */}
+            <div className="flex items-center gap-1 ml-2">
+              <span className="text-xs text-muted-foreground">Custom:</span>
+              <select
+                value={selectedMetric}
+                onChange={(e) => setSelectedMetric(e.target.value)}
+                className="rounded-md border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                {METRIC_OPTIONS.map((m) => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
+              <select
+                value={selectedType}
+                onChange={(e) => setSelectedType(e.target.value as DashboardWidget['type'])}
+                className="rounded-md border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <option value="kpi">KPI</option>
+                <option value="area_chart">Área</option>
+                <option value="bar_chart">Barras</option>
+              </select>
+              <button
+                onClick={() => addWidget(selectedType, selectedMetric)}
+                className="flex items-center gap-1 rounded-md border border-input bg-background px-2 py-1 text-xs hover:bg-accent transition-colors"
+              >
+                <Plus className="h-3 w-3" />
+                Adicionar
+              </button>
+            </div>
+
+            {/* Save / Cancel */}
+            <div className="ml-auto flex gap-2">
+              <button
+                onClick={() => setIsEditing(false)}
+                className="rounded-md border border-input px-3 py-1.5 text-xs hover:bg-accent"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => saveMutation.mutate()}
+                disabled={saveMutation.isPending}
+                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                  saved
+                    ? 'bg-green-500/15 text-green-600'
+                    : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                } disabled:opacity-50`}
+              >
+                <Save className="h-3 w-3" />
+                {saved ? 'Salvo!' : saveMutation.isPending ? 'Salvando...' : 'Salvar layout'}
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
+      {/* Empty state */}
       {widgets.length === 0 ? (
-        <div className="rounded-lg border border-dashed bg-card p-12 text-center">
-          <p className="text-sm text-muted-foreground">
-            Adicione widgets acima para construir seu dashboard personalizado.
+        <div className="rounded-lg border border-dashed bg-card p-16 text-center">
+          <LayoutDashboard className="h-10 w-10 text-muted-foreground/20 mx-auto mb-3" />
+          <p className="text-sm font-medium text-muted-foreground">Dashboard vazio</p>
+          <p className="text-xs text-muted-foreground/70 mt-1 mb-4">
+            Clique em "Editar layout" e adicione widgets para construir seu dashboard.
           </p>
+          <button
+            onClick={() => setIsEditing(true)}
+            className="text-xs text-primary hover:underline"
+          >
+            Editar layout →
+          </button>
         </div>
       ) : (
         <div className="rounded-lg border bg-card p-2 overflow-x-auto">
@@ -155,8 +447,10 @@ export function DashboardBuilder({ strategyId, initialConfig }: DashboardBuilder
             layout={layout}
             width={960}
             gridConfig={{ cols: 12, rowHeight: 40 }}
-            dragConfig={{ handle: '.drag-handle' }}
-            onLayoutChange={handleLayoutChange}
+            dragConfig={isEditing ? { handle: '.drag-handle' } : undefined}
+            onLayoutChange={isEditing ? handleLayoutChange : undefined}
+            isDraggable={isEditing}
+            isResizable={isEditing}
           >
             {widgets.map((widget) => (
               <div
@@ -165,25 +459,35 @@ export function DashboardBuilder({ strategyId, initialConfig }: DashboardBuilder
               >
                 {/* Widget header */}
                 <div className="flex items-center gap-1.5 px-2 py-1.5 border-b bg-muted/30 flex-shrink-0">
-                  <span className="drag-handle cursor-grab active:cursor-grabbing">
-                    <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
-                  </span>
+                  {isEditing && (
+                    <span className="drag-handle cursor-grab active:cursor-grabbing">
+                      <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
+                    </span>
+                  )}
                   <span className="text-xs font-medium text-foreground truncate flex-1">{widget.label}</span>
-                  <span className="text-xs text-muted-foreground bg-muted rounded px-1.5 py-0.5">{widget.type}</span>
-                  <button
-                    onClick={() => removeWidget(widget.id)}
-                    className="rounded p-0.5 hover:bg-destructive/10 transition-colors flex-shrink-0"
-                  >
-                    <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
-                  </button>
+                  <span className="text-xs text-muted-foreground/60 bg-muted/50 rounded px-1 py-0.5 hidden sm:block">
+                    {widget.type === 'kpi' ? 'KPI' : widget.type === 'area_chart' ? 'Área' : 'Barras'}
+                  </span>
+                  {isEditing && (
+                    <button
+                      onClick={() => removeWidget(widget.id)}
+                      className="rounded p-0.5 hover:bg-destructive/10 transition-colors flex-shrink-0"
+                    >
+                      <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+                    </button>
+                  )}
                 </div>
 
-                {/* Placeholder content */}
-                <div className="flex-1 flex items-center justify-center p-2">
-                  <span className="text-xs text-muted-foreground/50 italic">
-                    {widget.type === 'kpi' ? `KPI: ${widget.label}` : `Gráfico: ${widget.label}`}
-                  </span>
-                </div>
+                {/* Widget content */}
+                {widget.type === 'kpi' && (
+                  <KpiWidget widget={widget} metrics={metrics} />
+                )}
+                {widget.type === 'area_chart' && (
+                  <ChartWidget widget={widget} metrics={metrics} type="area" />
+                )}
+                {widget.type === 'bar_chart' && (
+                  <ChartWidget widget={widget} metrics={metrics} type="bar" />
+                )}
               </div>
             ))}
           </GridLayout>

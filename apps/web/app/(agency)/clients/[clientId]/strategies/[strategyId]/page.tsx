@@ -24,7 +24,7 @@ import {
   type SortingState,
   useReactTable,
 } from '@tanstack/react-table'
-import { ChevronUp, ChevronDown, ChevronsUpDown, Loader2, Check } from 'lucide-react'
+import { ChevronUp, ChevronDown, ChevronsUpDown, Loader2, Check, RefreshCw } from 'lucide-react'
 import { api } from '@/lib/api'
 import { formatCurrency, formatNumber, formatPercent } from '@/lib/utils'
 import { AiChat } from '@/components/ai-chat'
@@ -175,7 +175,7 @@ export default function StrategyDashboardPage() {
 
   const selectedAccountId = activeAccountId ?? accounts?.[0]?.id ?? null
 
-  // Metrics
+  // Metrics (by ad account — for Métricas tab)
   const { data: metrics, isLoading } = useQuery({
     queryKey: ['metrics', selectedAccountId, dateRange],
     enabled: !!selectedAccountId,
@@ -185,6 +185,31 @@ export default function StrategyDashboardPage() {
         { params: { adAccountId: selectedAccountId, clientId, dateFrom: dateRange.from, dateTo: dateRange.to } },
       )
       return res.data.data
+    },
+  })
+
+  // Strategy metrics (filtered by linked campaigns — for Dashboard tab)
+  const { data: strategyMetrics, isLoading: loadingStrategyMetrics } = useQuery({
+    queryKey: ['strategy-metrics', strategyId, dateRange],
+    queryFn: async () => {
+      const res = await api.get<{ data: { rows: MetricRow[]; totals: MetricsTotals } }>(
+        '/api/metrics/strategy',
+        { params: { strategyId, clientId, dateFrom: dateRange.from, dateTo: dateRange.to } },
+      )
+      return res.data.data
+    },
+  })
+
+  // Manual sync
+  const syncMutation = useMutation({
+    mutationFn: async (adAccountId: string) => {
+      await api.post(`/api/ad-accounts/${adAccountId}/sync`, {}, { params: { clientId } })
+    },
+    onSuccess: () => {
+      setTimeout(() => {
+        void queryClient.invalidateQueries({ queryKey: ['metrics'] })
+        void queryClient.invalidateQueries({ queryKey: ['strategy-metrics'] })
+      }, 3000)
     },
   })
 
@@ -510,19 +535,53 @@ export default function StrategyDashboardPage() {
               {linkedCampaigns.length} campanha{linkedCampaigns.length !== 1 ? 's' : ''} vinculada{linkedCampaigns.length !== 1 ? 's' : ''} — as métricas desta estratégia serão filtradas por essas campanhas.
             </p>
           )}
+
+          {/* Sync manual */}
+          {accounts && accounts.filter((a) => a.platform === 'META_ADS').length > 0 && (
+            <div className="rounded-lg border bg-card p-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-foreground">Sincronizar métricas agora</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Busca os dados mais recentes do Meta Ads para todas as contas conectadas.</p>
+              </div>
+              <button
+                onClick={() => {
+                  const metaAccounts = accounts?.filter((a) => a.platform === 'META_ADS') ?? []
+                  for (const acc of metaAccounts) {
+                    syncMutation.mutate(acc.id)
+                  }
+                }}
+                disabled={syncMutation.isPending}
+                className="flex items-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm hover:bg-accent transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`h-4 w-4 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
+                {syncMutation.isPending ? 'Sincronizando...' : syncMutation.isSuccess ? 'Sincronizado!' : 'Sincronizar'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
       {/* === TAB: Dashboard Builder === */}
       {activeTab === 'dashboard' && (
         <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Construa um dashboard personalizado arrastando e redimensionando widgets. O layout é salvo automaticamente.
-          </p>
-          <DashboardBuilder
-            strategyId={strategyId}
-            initialConfig={strategyInfo?.dashboardConfig as import('@/components/dashboard-builder').DashboardConfig | null}
-          />
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              Dashboard personalizado com dados reais do período selecionado.
+            </p>
+            <DateRangePicker value={dateRange} onChange={setDateRange} />
+          </div>
+          {loadingStrategyMetrics ? (
+            <div className="flex items-center gap-2 py-8 justify-center text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-sm">Carregando métricas...</span>
+            </div>
+          ) : (
+            <DashboardBuilder
+              strategyId={strategyId}
+              initialConfig={strategyInfo?.dashboardConfig as import('@/components/dashboard-builder').DashboardConfig | null}
+              metrics={strategyMetrics ?? null}
+            />
+          )}
         </div>
       )}
     </div>

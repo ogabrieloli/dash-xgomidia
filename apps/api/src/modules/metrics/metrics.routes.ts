@@ -27,6 +27,8 @@ function serializeRow(row: {
   spend: { toString(): string }
   conversions: number
   revenue: { toString(): string } | null
+  reach: number | null
+  videoViews: number | null
   derived: Record<string, number>
 }) {
   return {
@@ -36,6 +38,8 @@ function serializeRow(row: {
     spend: row.spend.toString(),
     conversions: row.conversions,
     revenue: row.revenue?.toString() ?? null,
+    reach: row.reach,
+    videoViews: row.videoViews,
     derived: row.derived,
   }
 }
@@ -46,6 +50,8 @@ function serializeTotals(totals: {
   spend: { toString(): string }
   conversions: number
   revenue: { toString(): string }
+  reach: number
+  videoViews: number
   derived: Record<string, number>
 }) {
   return {
@@ -54,6 +60,8 @@ function serializeTotals(totals: {
     spend: totals.spend.toString(),
     conversions: totals.conversions,
     revenue: totals.revenue.toString(),
+    reach: totals.reach,
+    videoViews: totals.videoViews,
     derived: totals.derived,
   }
 }

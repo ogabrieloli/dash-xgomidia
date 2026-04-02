@@ -10,6 +10,8 @@ export interface MetricRow {
   spend: Decimal
   conversions: number
   revenue: Decimal | null
+  reach: number | null
+  videoViews: number | null
   derived: {
     ctr: number
     cpc: number
@@ -25,6 +27,8 @@ export interface MetricTotals {
   spend: Decimal
   conversions: number
   revenue: Decimal
+  reach: number
+  videoViews: number
   derived: {
     ctr: number
     cpc: number
@@ -87,6 +91,8 @@ function buildTotals(rows: MetricRow[]): MetricTotals {
     (s, r) => s.add(r.revenue ?? new Decimal(0)),
     new Decimal(0),
   )
+  const reach = rows.reduce((s, r) => s + (r.reach ?? 0), 0)
+  const videoViews = rows.reduce((s, r) => s + (r.videoViews ?? 0), 0)
 
   return {
     impressions,
@@ -94,6 +100,8 @@ function buildTotals(rows: MetricRow[]): MetricTotals {
     spend,
     conversions,
     revenue,
+    reach,
+    videoViews,
     derived: computeDerived(
       impressions,
       clicks,
@@ -112,6 +120,8 @@ function snapshotsToRows(
     spend: Decimal
     conversions: number
     revenue: Decimal | null
+    reach: number | null
+    videoViews: number | null
   }>,
 ): MetricRow[] {
   return snapshots.map((s) => {
@@ -128,6 +138,8 @@ function snapshotsToRows(
       spend: s.spend,
       conversions,
       revenue: s.revenue,
+      reach: s.reach,
+      videoViews: s.videoViews,
       derived: computeDerived(impressions, clicks, spend, conversions, revenue),
     }
   })

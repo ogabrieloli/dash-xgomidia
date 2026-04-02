@@ -266,6 +266,10 @@ model MetricSnapshot {
   conversions Int     @default(0)
   revenue     Decimal? @db.Decimal(12, 2)
 
+  // Métricas de alcance e engajamento
+  reach      Int? // número de pessoas únicas alcançadas
+  videoViews Int? // visualizações de vídeo (ThruPlay)
+
   // Métricas derivadas são calculadas em runtime (CTR, CPC, CPA, ROAS, CPM)
   // não armazenadas — usar views no DB ou calcular no service
 

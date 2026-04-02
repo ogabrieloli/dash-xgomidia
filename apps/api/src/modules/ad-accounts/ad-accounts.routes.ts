@@ -217,4 +217,36 @@ export async function adAccountsRoutes(app: FastifyInstance) {
 
     return reply.status(204).send()
   })
+
+  // POST /api/ad-accounts/:id/sync — enfileira job de sincronização imediata
+  app.post('/:id/sync', {
+    preHandler: [authenticate, requireRole('AGENCY_ADMIN', 'AGENCY_MANAGER')],
+  }, async (request, reply) => {
+    const { id } = AdAccountIdParamSchema.parse(request.params)
+    const query = AdAccountClientQuerySchema.parse(request.query)
+    await assertClientAccess(request.user.sub, request.user.role, query.clientId, app.db)
+
+    const account = await app.db.adAccount.findFirst({ where: { id } })
+    if (!account) throw new NotFoundError('Conta de anúncios não encontrada')
+
+    const redisUrl = process.env['REDIS_URL'] ?? 'redis://localhost:6379'
+    const { Redis } = await import('ioredis')
+    const connection = new Redis(redisUrl, { maxRetriesPerRequest: null })
+    const queue = new Queue<MetaAdsSyncJob>(QUEUES.META_ADS_SYNC, { connection })
+
+    const today = format(new Date(), 'yyyy-MM-dd')
+    const sevenDaysAgo = format(subDays(new Date(), 7), 'yyyy-MM-dd')
+
+    await queue.add('sync', {
+      adAccountId: id,
+      clientId: query.clientId,
+      dateRange: { from: sevenDaysAgo, to: today },
+      triggeredBy: 'manual' as const,
+    }, { attempts: 2 })
+
+    await queue.close()
+    await connection.quit()
+
+    return reply.status(202).send({ data: { queued: true } })
+  })
 }

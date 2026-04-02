@@ -14,6 +14,8 @@ export interface NormalizedMetric {
   spend: number                 // sempre em BRL (converter se necessário)
   conversions: number
   revenue?: number
+  reach?: number                // pessoas únicas alcançadas
+  videoViews?: number           // visualizações de vídeo (ThruPlay)
   externalCampaignId?: string   // presente quando level=campaign
   campaignName?: string
   rawData: unknown              // dados originais da plataforma — útil para debug
