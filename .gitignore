@@ -40,3 +40,6 @@ apps/api/src/generated/
 
 # Docker volumes (local)
 .docker-data/
+
+# Git worktrees
+.worktrees/
