@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
-import { Plus, Search, Building2, ChevronRight } from 'lucide-react'
+import { Plus, Search, Building2 } from 'lucide-react'
 import { api } from '@/lib/api'
 
 interface Client {
@@ -16,6 +16,30 @@ interface Client {
   initialInvestment: string | null
   reportedRevenue: string | null
   _count?: { adAccounts: number }
+}
+
+function ClientAvatar({ name, logoUrl }: { name: string; logoUrl: string | null }) {
+  if (logoUrl) {
+    return (
+      <img
+        src={logoUrl}
+        alt={name}
+        className="h-12 w-12 rounded-full object-cover border border-border flex-shrink-0"
+        onError={(e) => {
+          const target = e.currentTarget as HTMLImageElement
+          target.style.display = 'none'
+          if (target.nextElementSibling) {
+            (target.nextElementSibling as HTMLElement).style.display = 'flex'
+          }
+        }}
+      />
+    )
+  }
+  return (
+    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-lg font-bold text-primary flex-shrink-0">
+      {name[0]?.toUpperCase()}
+    </div>
+  )
 }
 
 export default function ClientsPage() {
@@ -62,15 +86,15 @@ export default function ClientsPage() {
         />
       </div>
 
-      {/* Table */}
+      {/* Cards */}
       {isLoading ? (
-        <div className="space-y-2">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="h-14 rounded-lg border bg-card animate-pulse" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="h-48 rounded-xl border bg-card animate-pulse" />
           ))}
         </div>
       ) : data?.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
+        <div className="flex flex-col items-center justify-center py-20 text-center">
           <Building2 className="h-12 w-12 text-muted-foreground/30 mb-3" />
           <p className="text-sm font-medium text-muted-foreground">Nenhum cliente encontrado</p>
           <Link href="/clients/new" className="mt-4 text-sm text-primary hover:underline">
@@ -78,63 +102,51 @@ export default function ClientsPage() {
           </Link>
         </div>
       ) : (
-        <div className="rounded-lg border bg-card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted/40">
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nome</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Operação</th>
-                <th className="text-center px-4 py-3 font-medium text-muted-foreground hidden sm:table-cell">Investindo</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Faturamento</th>
-                <th className="text-center px-4 py-3 font-medium text-muted-foreground hidden sm:table-cell">Contas</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {data?.map((client, i) => (
-                <tr
-                  key={client.id}
-                  className={`border-b last:border-0 hover:bg-muted/30 transition-colors ${i % 2 === 0 ? '' : 'bg-muted/10'}`}
-                >
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary flex-shrink-0">
-                        {client.name[0]?.toUpperCase()}
-                      </div>
-                      <div>
-                        <p className="font-medium text-foreground">{client.name}</p>
-                        <p className="text-xs text-muted-foreground">{client.slug}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 hidden md:table-cell">
-                    <span className="text-muted-foreground line-clamp-1">{client.operation ?? '—'}</span>
-                  </td>
-                  <td className="px-4 py-3 text-center hidden sm:table-cell">
-                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${client.alreadyInvesting ? 'bg-green-500/15 text-green-600' : 'bg-muted text-muted-foreground'}`}>
-                      {client.alreadyInvesting ? 'Sim' : 'Não'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right hidden lg:table-cell text-muted-foreground">
-                    {client.reportedRevenue
-                      ? `R$ ${parseFloat(client.reportedRevenue).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-                      : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-center hidden sm:table-cell text-muted-foreground">
-                    {client._count?.adAccounts ?? 0}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/clients/${client.id}`}
-                      className="flex items-center justify-end text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {data?.map((client) => (
+            <Link
+              key={client.id}
+              href={`/clients/${client.id}`}
+              className="group rounded-xl border bg-card p-5 hover:shadow-md hover:border-primary/30 transition-all flex flex-col gap-4"
+            >
+              {/* Top: avatar + name */}
+              <div className="flex items-center gap-3">
+                <ClientAvatar name={client.name} logoUrl={client.logoUrl} />
+                <div className="min-w-0">
+                  <p className="font-semibold text-foreground truncate">{client.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">/{client.slug}</p>
+                </div>
+              </div>
+
+              {/* Operation description */}
+              <p className="text-sm text-muted-foreground line-clamp-2 flex-1 min-h-[2.5rem]">
+                {client.operation ?? 'Sem descrição do negócio'}
+              </p>
+
+              {/* Footer: badges */}
+              <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-border">
+                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                  client.alreadyInvesting
+                    ? 'bg-green-500/15 text-green-600'
+                    : 'bg-muted text-muted-foreground'
+                }`}>
+                  {client.alreadyInvesting ? 'Investindo' : 'Sem investimento'}
+                </span>
+
+                {(client._count?.adAccounts ?? 0) > 0 && (
+                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs bg-blue-500/10 text-blue-600 font-medium">
+                    {client._count?.adAccounts} conta{(client._count?.adAccounts ?? 0) !== 1 ? 's' : ''}
+                  </span>
+                )}
+
+                {client.reportedRevenue && (
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    R$ {parseFloat(client.reportedRevenue).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}/m
+                  </span>
+                )}
+              </div>
+            </Link>
+          ))}
         </div>
       )}
     </div>

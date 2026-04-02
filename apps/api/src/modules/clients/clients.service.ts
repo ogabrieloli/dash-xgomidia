@@ -40,13 +40,32 @@ export class ClientsService {
           : {}),
       },
       orderBy: { name: 'asc' },
+      include: {
+        _count: { select: { adAccounts: true } },
+      },
     })
   }
 
   async findById(id: string, agencyId: string) {
     return this.db.client.findFirst({
       where: { id, agencyId, deletedAt: null },
-      include: { projects: { where: { deletedAt: null }, orderBy: { name: 'asc' } } },
+      include: {
+        projects: {
+          where: { deletedAt: null },
+          orderBy: { name: 'asc' },
+          include: {
+            strategies: {
+              where: { deletedAt: null },
+              orderBy: { name: 'asc' },
+              select: { id: true, name: true, funnelType: true, objective: true },
+            },
+          },
+        },
+        adAccounts: {
+          where: { deletedAt: null },
+          select: { id: true, platform: true, name: true, syncStatus: true },
+        },
+      },
     })
   }
 

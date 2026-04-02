@@ -15,6 +15,7 @@ const CreateClientSchema = z.object({
     .min(2, 'Slug deve ter pelo menos 2 caracteres')
     .max(50)
     .regex(/^[a-z0-9-]+$/, 'Apenas letras minúsculas, números e hífens'),
+  logoUrl: z.string().url('URL inválida').optional().or(z.literal('')),
   operation: z.string().max(500).optional(),
   alreadyInvesting: z.boolean().default(false),
   initialInvestment: z.string().optional(),
@@ -28,11 +29,13 @@ export default function NewClientPage() {
   const router = useRouter()
   const queryClient = useQueryClient()
   const [investingToggle, setInvestingToggle] = useState(false)
+  const [logoPreview, setLogoPreview] = useState('')
 
   const {
     register,
     handleSubmit,
     setValue,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<CreateClientForm>({
     resolver: zodResolver(CreateClientSchema),
@@ -62,6 +65,7 @@ export default function NewClientPage() {
         slug: data.slug,
         alreadyInvesting: data.alreadyInvesting,
       }
+      if (data.logoUrl) payload['logoUrl'] = data.logoUrl
       if (data.operation) payload['operation'] = data.operation
       if (data.initialInvestment) payload['initialInvestment'] = parseFloat(data.initialInvestment)
       if (data.reportedRevenue) payload['reportedRevenue'] = parseFloat(data.reportedRevenue)
@@ -100,6 +104,36 @@ export default function NewClientPage() {
               {...register('name', { onChange: handleNameChange })}
             />
             {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
+          </div>
+
+          {/* Logo URL */}
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-foreground">Logo (URL)</label>
+            <div className="flex items-center gap-3">
+              {logoPreview && (
+                <img
+                  src={logoPreview}
+                  alt="Preview"
+                  className="h-12 w-12 rounded-full object-cover border border-border flex-shrink-0"
+                  onError={() => setLogoPreview('')}
+                />
+              )}
+              {!logoPreview && (
+                <div className="h-12 w-12 rounded-full bg-muted border border-dashed border-input flex items-center justify-center text-xs text-muted-foreground flex-shrink-0">
+                  Logo
+                </div>
+              )}
+              <input
+                type="url"
+                className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="https://exemplo.com/logo.png"
+                {...register('logoUrl', {
+                  onChange: (e) => setLogoPreview(e.target.value),
+                })}
+              />
+            </div>
+            {errors.logoUrl && <p className="text-xs text-destructive">{errors.logoUrl.message}</p>}
+            <p className="text-xs text-muted-foreground">Opcional. Cole a URL pública da logo do cliente.</p>
           </div>
 
           {/* Slug */}
