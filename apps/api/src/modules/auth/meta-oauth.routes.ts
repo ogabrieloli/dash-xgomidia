@@ -97,7 +97,7 @@ export async function metaOAuthRoutes(app: FastifyInstance) {
     const params = new URLSearchParams({
       client_id: appId,
       redirect_uri: redirectUri,
-      scope: ['ads_read', 'ads_management'].join(','),
+      scope: ['public_profile', 'ads_read', 'ads_management', 'business_management', 'pages_show_list'].join(','),
       response_type: 'code',
       state,
     })
