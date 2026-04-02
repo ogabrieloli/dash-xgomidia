@@ -193,7 +193,7 @@ export default function StrategyDashboardPage() {
     queryKey: ['metrics', selectedAccountId, dateRange],
     enabled: !!selectedAccountId,
     queryFn: async () => {
-      const res = await api.get<{ data: { rows: MetricRow[]; totals: MetricsTotals } }>(
+      const res = await api.get<{ data: { rows: MetricRow[]; totals: MetricsTotals; previousTotals?: MetricsTotals } }>(
         '/api/metrics/strategy',
         {
           params: {
@@ -201,7 +201,8 @@ export default function StrategyDashboardPage() {
             adAccountId: selectedAccountId,
             clientId,
             dateFrom: dateRange.from,
-            dateTo: dateRange.to
+            dateTo: dateRange.to,
+            compare: 'true',
           }
         },
       )
@@ -244,8 +245,16 @@ export default function StrategyDashboardPage() {
   })
 
   const totals = metrics?.totals
+  const prev = metrics?.previousTotals
   const spend = parseFloat(totals?.spend ?? '0')
   const revenue = parseFloat(totals?.revenue ?? '0')
+
+  // delta(current, previous) → % change; invertDelta=true para métricas onde menor = melhor
+  function delta(cur: number, prevVal: number | undefined, invertDelta = false): number | undefined {
+    if (prevVal === undefined || prevVal === 0) return undefined
+    const pct = ((cur - prevVal) / Math.abs(prevVal)) * 100
+    return invertDelta ? -pct : pct
+  }
 
   const chartData = [...(metrics?.rows ?? [])]
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -328,19 +337,36 @@ export default function StrategyDashboardPage() {
           )}
 
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-            <KpiCard label="Investimento" value={formatCurrency(spend)} loading={isLoading} />
-            <KpiCard label="Receita" value={formatCurrency(revenue)} loading={isLoading} />
-            <KpiCard label="ROAS" value={totals ? `${totals.derived.roas.toFixed(2)}x` : '—'} loading={isLoading} />
+            <KpiCard
+              label="Investimento"
+              value={formatCurrency(spend)}
+              change={delta(spend, prev ? parseFloat(prev.spend) : undefined, true)}
+              loading={isLoading}
+            />
+            <KpiCard
+              label="Receita"
+              value={formatCurrency(revenue)}
+              change={delta(revenue, prev ? parseFloat(prev.revenue) : undefined)}
+              loading={isLoading}
+            />
+            <KpiCard
+              label="ROAS"
+              value={totals ? `${totals.derived.roas.toFixed(2)}x` : '—'}
+              change={delta(totals?.derived.roas ?? 0, prev?.derived.roas)}
+              loading={isLoading}
+            />
             <KpiCard
               label="Conversões"
               value={totals ? formatNumber(totals.conversions) : '—'}
               sub={totals ? `CPA: ${formatCurrency(totals.derived.cpa)}` : undefined}
+              change={delta(totals?.conversions ?? 0, prev?.conversions)}
               loading={isLoading}
             />
             <KpiCard
               label="CTR"
               value={totals ? formatPercent(totals.derived.ctr) : '—'}
               sub={totals ? `CPC: ${formatCurrency(totals.derived.cpc)}` : undefined}
+              change={delta(totals?.derived.ctr ?? 0, prev?.derived.ctr)}
               loading={isLoading}
             />
           </div>

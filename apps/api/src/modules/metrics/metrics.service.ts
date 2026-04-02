@@ -77,6 +77,7 @@ export interface MetricTotals {
 export interface MetricsResult {
   rows: MetricRow[]
   totals: MetricTotals
+  previousTotals?: MetricTotals
 }
 
 export interface ClientSummary {
@@ -380,11 +381,34 @@ export class MetricsService {
   }
 
   /**
+   * Calcula o período anterior com a mesma duração que dateRange.
+   * Ex: 01/04–30/04 (30 dias) → 02/03–31/03
+   */
+  private previousPeriod(dateRange: DateRange): DateRange {
+    const from = new Date(dateRange.from + 'T00:00:00Z')
+    const to = new Date(dateRange.to + 'T00:00:00Z')
+    const days = Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1
+    const prevTo = new Date(from.getTime() - 86_400_000)
+    const prevFrom = new Date(prevTo.getTime() - (days - 1) * 86_400_000)
+    return {
+      from: prevFrom.toISOString().slice(0, 10),
+      to: prevTo.toISOString().slice(0, 10),
+    }
+  }
+
+  /**
    * Busca métricas de uma estratégia.
    * Se a estratégia tiver campanhas vinculadas, filtra por `externalCampaignId`.
    * Permite filtrar opcionalmente por uma conta específica.
+   * Quando `compare=true`, inclui `previousTotals` (mesmo período imediatamente anterior).
    */
-  async getByStrategy(strategyId: string, clientId: string, dateRange: DateRange, adAccountId?: string): Promise<MetricsResult> {
+  async getByStrategy(
+    strategyId: string,
+    clientId: string,
+    dateRange: DateRange,
+    adAccountId?: string,
+    compare = false,
+  ): Promise<MetricsResult> {
     // Campanhas vinculadas à estratégia
     const linkedCampaigns = await this.db.strategyCampaign.findMany({
       where: {
@@ -404,19 +428,31 @@ export class MetricsService {
       return { rows: [], totals: buildTotals([]) }
     }
 
-    const where = linkedCampaigns.length > 0
+    const buildWhere = (range: DateRange) => linkedCampaigns.length > 0
       ? {
         adAccountId: { in: linkedCampaigns.map((c) => c.adAccountId) },
         externalCampaignId: { in: linkedCampaigns.map((c) => c.externalId) },
-        date: { gte: new Date(dateRange.from), lte: new Date(dateRange.to) },
+        date: { gte: new Date(range.from), lte: new Date(range.to) },
       }
       : {
         adAccountId: { in: accountIds },
-        date: { gte: new Date(dateRange.from), lte: new Date(dateRange.to) },
+        date: { gte: new Date(range.from), lte: new Date(range.to) },
       }
 
-    const snapshots = await this.db.metricSnapshot.findMany({ where, orderBy: { date: 'asc' } })
+    const [snapshots, prevSnapshots] = await Promise.all([
+      this.db.metricSnapshot.findMany({ where: buildWhere(dateRange), orderBy: { date: 'asc' } }),
+      compare
+        ? this.db.metricSnapshot.findMany({ where: buildWhere(this.previousPeriod(dateRange)) })
+        : Promise.resolve(null),
+    ])
+
     const rows = snapshotsToRows(snapshots)
-    return { rows, totals: buildTotals(rows) }
+    const totals = buildTotals(rows)
+
+    const result: MetricsResult = { rows, totals }
+    if (prevSnapshots) {
+      result.previousTotals = buildTotals(snapshotsToRows(prevSnapshots))
+    }
+    return result
   }
 }

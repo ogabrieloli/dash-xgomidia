@@ -167,7 +167,7 @@ export async function metricsRoutes(app: FastifyInstance) {
     return { data: { totals: serializeTotals(result.totals) } }
   })
 
-  // GET /api/metrics/strategy?strategyId=&clientId=&dateFrom=&dateTo=
+  // GET /api/metrics/strategy?strategyId=&clientId=&dateFrom=&dateTo=&compare=true
   app.get('/strategy', {
     preHandler: [authenticate],
   }, async (request) => {
@@ -175,19 +175,24 @@ export async function metricsRoutes(app: FastifyInstance) {
       strategyId: z.string().uuid(),
       clientId: z.string().uuid(),
       adAccountId: z.string().uuid().optional(),
+      compare: z.enum(['true', 'false']).optional(),
     }).parse(request.query)
 
     await assertClientAccess(request.user.sub, request.user.role, query.clientId, app.db)
 
-    const result = await service.getByStrategy(query.strategyId, query.clientId, {
-      from: query.dateFrom,
-      to: query.dateTo,
-    }, query.adAccountId)
+    const result = await service.getByStrategy(
+      query.strategyId,
+      query.clientId,
+      { from: query.dateFrom, to: query.dateTo },
+      query.adAccountId,
+      query.compare === 'true',
+    )
 
     return {
       data: {
         rows: result.rows.map(serializeRow),
         totals: serializeTotals(result.totals),
+        previousTotals: result.previousTotals ? serializeTotals(result.previousTotals) : undefined,
       },
     }
   })
