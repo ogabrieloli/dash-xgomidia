@@ -34,106 +34,121 @@ export async function processMetaAdsSyncJob(job: Job<MetaAdsSyncJob>): Promise<v
 
   log.info({ jobId: job.id, adAccountId, clientId }, 'Iniciando sync Meta Ads')
 
-  // 1. Buscar AdAccount no banco
-  const adAccount = await db.adAccount.findFirst({
-    where: { id: adAccountId, clientId },
-  })
-
-  if (!adAccount) {
-    throw new Error(`AdAccount ${adAccountId} não encontrada`)
-  }
-
-  // 2. Atualizar status para SYNCING
-  await db.adAccount.update({
-    where: { id: adAccountId },
-    data: { syncStatus: 'SYNCING' },
-  })
-
-  // 3. Ler tokens do Vault
-  const vault = await createVaultClient()
-  const tokens = await getAdAccountToken(vault, adAccount.vaultSecretPath)
-
-  let accessToken = tokens.access_token
-
-  // 4. Validar token — renovar se necessário
-  const expiresAt = new Date(tokens.expires_at)
-  const isExpiredOrExpiring = expiresAt <= new Date(Date.now() + 5 * 60 * 1000) // 5min buffer
-
-  if (isExpiredOrExpiring) {
-    log.info({ adAccountId }, 'Token expirado — renovando via Meta API')
-
-    // Usar o token atual como refresh token (Meta long-lived token exchange)
-    const refreshed = await metaAdapter.refreshToken(accessToken)
-    accessToken = refreshed.accessToken
-
-    // Atualizar token no Vault
-    await storeAdAccountToken(vault, clientId, 'META_ADS', adAccount.externalId, {
-      accessToken: refreshed.accessToken,
-      expiresAt: refreshed.expiresAt,
+  try {
+    // 1. Buscar AdAccount no banco
+    const adAccount = await db.adAccount.findFirst({
+      where: { id: adAccountId, clientId },
     })
 
-    log.info({ adAccountId }, 'Token renovado com sucesso')
-  }
+    if (!adAccount) {
+      log.error({ adAccountId }, 'AdAccount não encontrada no banco')
+      return // Se não existe, não adianta tentar de novo
+    }
 
-  // 5. Buscar métricas por campanha
-  log.info({ adAccountId, dateRange }, 'Buscando métricas do Meta Ads (level=campaign)')
-  const metrics = await metaAdapter.fetchMetrics(adAccount.externalId, accessToken, dateRange, 'campaign')
-  log.info({ adAccountId, count: metrics.length }, 'Métricas recebidas')
+    // 2. Atualizar status para SYNCING
+    await db.adAccount.update({
+      where: { id: adAccountId },
+      data: { syncStatus: 'SYNCING' },
+    })
 
-  // 6. Persistir MetricSnapshots (upsert por campanha por dia)
-  let upsertCount = 0
-  for (const metric of metrics) {
-    const externalCampaignId = metric.externalCampaignId ?? null
-    await db.metricSnapshot.upsert({
-      where: {
-        adAccountId_date_platform_externalCampaignId: {
+    // 3. Ler tokens do Vault
+    const vault = await createVaultClient()
+    const tokens = await getAdAccountToken(vault, adAccount.vaultSecretPath)
+
+    if (!tokens?.access_token) {
+      throw new Error('Token de acesso não encontrado no Vault')
+    }
+
+    let accessToken = tokens.access_token
+
+    // 4. Validar token — renovar se necessário
+    const expiresAt = new Date(tokens.expires_at)
+    const isExpiredOrExpiring = expiresAt <= new Date(Date.now() + 5 * 60 * 1000) // 5min buffer
+
+    if (isExpiredOrExpiring) {
+      log.info({ adAccountId }, 'Token expirado — renovando via Meta API')
+
+      // Usar o token atual como refresh token (Meta long-lived token exchange)
+      const refreshed = await metaAdapter.refreshToken(accessToken)
+      accessToken = refreshed.accessToken
+
+      // Atualizar token no Vault
+      await storeAdAccountToken(vault, clientId, 'META_ADS', adAccount.externalId, {
+        accessToken: refreshed.accessToken,
+        expiresAt: refreshed.expiresAt,
+      })
+
+      log.info({ adAccountId }, 'Token renovado com sucesso')
+    }
+
+    // 5. Buscar métricas por campanha
+    log.info({ adAccountId, dateRange }, 'Buscando métricas do Meta Ads (level=campaign)')
+    const metrics = await metaAdapter.fetchMetrics(adAccount.externalId, accessToken, dateRange, 'campaign')
+    log.info({ adAccountId, count: metrics.length }, 'Métricas recebidas')
+
+    // 6. Persistir MetricSnapshots (upsert por campanha por dia)
+    let upsertCount = 0
+    for (const metric of metrics) {
+      const externalCampaignId = metric.externalCampaignId ?? null
+      await db.metricSnapshot.upsert({
+        where: {
+          adAccountId_date_platform_externalCampaignId: {
+            adAccountId,
+            date: new Date(metric.date),
+            platform: 'META_ADS',
+            externalCampaignId: externalCampaignId ?? '',
+          },
+        },
+        create: {
           adAccountId,
           date: new Date(metric.date),
           platform: 'META_ADS',
-          externalCampaignId: externalCampaignId ?? '',
+          impressions: BigInt(metric.impressions),
+          clicks: BigInt(metric.clicks),
+          spend: metric.spend,
+          conversions: metric.conversions,
+          revenue: metric.revenue ?? null,
+          reach: metric.reach ?? null,
+          videoViews: metric.videoViews ?? null,
+          rawData: metric.rawData as object,
+          externalCampaignId,
+          campaignName: metric.campaignName ?? null,
         },
-      },
-      create: {
-        adAccountId,
-        date: new Date(metric.date),
-        platform: 'META_ADS',
-        impressions: BigInt(metric.impressions),
-        clicks: BigInt(metric.clicks),
-        spend: metric.spend,
-        conversions: metric.conversions,
-        revenue: metric.revenue ?? null,
-        reach: metric.reach ?? null,
-        videoViews: metric.videoViews ?? null,
-        rawData: metric.rawData as object,
-        externalCampaignId,
-        campaignName: metric.campaignName ?? null,
-      },
-      update: {
-        impressions: BigInt(metric.impressions),
-        clicks: BigInt(metric.clicks),
-        spend: metric.spend,
-        conversions: metric.conversions,
-        revenue: metric.revenue ?? null,
-        reach: metric.reach ?? null,
-        videoViews: metric.videoViews ?? null,
-        rawData: metric.rawData as object,
-        campaignName: metric.campaignName ?? null,
+        update: {
+          impressions: BigInt(metric.impressions),
+          clicks: BigInt(metric.clicks),
+          spend: metric.spend,
+          conversions: metric.conversions,
+          revenue: metric.revenue ?? null,
+          reach: metric.reach ?? null,
+          videoViews: metric.videoViews ?? null,
+          rawData: metric.rawData as object,
+          campaignName: metric.campaignName ?? null,
+        },
+      })
+      upsertCount++
+    }
+
+    // 7. Marcar sync como concluído
+    await db.adAccount.update({
+      where: { id: adAccountId },
+      data: {
+        syncStatus: 'SUCCESS',
+        lastSyncAt: new Date(),
+        syncError: null,
       },
     })
-    upsertCount++
+
+    log.info({ adAccountId, upsertCount }, 'Sync Meta Ads concluído com sucesso')
+  } catch (err) {
+    const error = err as Error
+    log.error({ adAccountId, error: error.message }, 'Erro durante processamento do job')
+
+    // Se for o primeiro erro e quisermos que a UI mostre erro logo, ou se preferir deixar o BullMQ tentar
+    // Vamos deixar o BullMQ tentar, mas o worker.on('failed') cuidará do status se esgotar.
+    // Porém, se o erro for de Vault ou Token, talvez não faça sentido tentar 3 vezes rápido.
+    throw err
   }
-
-  // 7. Marcar sync como concluído
-  await db.adAccount.update({
-    where: { id: adAccountId },
-    data: {
-      syncStatus: 'SUCCESS',
-      lastSyncAt: new Date(),
-      syncError: null,
-    },
-  })
-
-  log.info({ adAccountId, upsertCount }, 'Sync Meta Ads concluído com sucesso')
 }
 
 async function createVaultClient() {

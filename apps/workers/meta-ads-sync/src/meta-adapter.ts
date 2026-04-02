@@ -77,58 +77,65 @@ export class MetaAdapter implements PlatformAdapter {
     let nextUrl: string | undefined = this.buildInsightsUrl(accountId, accessToken, dateRange, level)
 
     while (nextUrl) {
-      const res = await fetch(nextUrl)
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s timeout
 
-      if (!res.ok) {
-        const errorBody = await res.text()
-        throw new Error(`Meta API error ${res.status}: ${errorBody}`)
-      }
+      try {
+        const res = await fetch(nextUrl, { signal: controller.signal })
 
-      const body = await res.json() as MetaInsightsResponse
-
-      for (const row of body.data) {
-        const conversions =
-          extractActionValue(row.actions, 'purchase') +
-          extractActionValue(row.actions, 'lead') +
-          extractActionValue(row.actions, 'complete_registration')
-
-        const revenue = extractActionValue(row.action_values, 'purchase')
-
-        const metric: NormalizedMetric = {
-          date: row.date_start,
-          platform: 'META_ADS',
-          externalAccountId: accountId,
-          impressions: parseInt(row.impressions, 10) || 0,
-          clicks: parseInt(row.clicks, 10) || 0,
-          spend: parseFloat(row.spend) || 0,
-          conversions,
-          rawData: row,
+        if (!res.ok) {
+          const errorBody = await res.text()
+          throw new Error(`Meta API error ${res.status}: ${errorBody}`)
         }
 
-        if (revenue > 0) {
-          metric.revenue = revenue
-        }
+        const body = (await res.json()) as MetaInsightsResponse
 
-        if (row.reach !== undefined) {
-          metric.reach = parseInt(row.reach, 10) || 0
-        }
+        for (const row of body.data) {
+          const conversions =
+            extractActionValue(row.actions, 'purchase') +
+            extractActionValue(row.actions, 'lead') +
+            extractActionValue(row.actions, 'complete_registration')
 
-        const videoViews = extractActionValue(row.video_thruplay_watched_actions, 'video_view')
-        if (videoViews > 0) {
-          metric.videoViews = videoViews
-        }
+          const revenue = extractActionValue(row.action_values, 'purchase')
 
-        if (row.campaign_id) {
-          metric.externalCampaignId = row.campaign_id
-          if (row.campaign_name !== undefined) {
-            metric.campaignName = row.campaign_name
+          const metric: NormalizedMetric = {
+            date: row.date_start,
+            platform: 'META_ADS',
+            externalAccountId: accountId,
+            impressions: parseInt(row.impressions, 10) || 0,
+            clicks: parseInt(row.clicks, 10) || 0,
+            spend: parseFloat(row.spend) || 0,
+            conversions,
+            rawData: row,
           }
+
+          if (revenue > 0) {
+            metric.revenue = revenue
+          }
+
+          if (row.reach !== undefined) {
+            metric.reach = parseInt(row.reach, 10) || 0
+          }
+
+          const videoViews = extractActionValue(row.video_thruplay_watched_actions, 'video_view')
+          if (videoViews > 0) {
+            metric.videoViews = videoViews
+          }
+
+          if (row.campaign_id) {
+            metric.externalCampaignId = row.campaign_id
+            if (row.campaign_name !== undefined) {
+              metric.campaignName = row.campaign_name
+            }
+          }
+
+          metrics.push(metric)
         }
 
-        metrics.push(metric)
+        nextUrl = body.paging?.next
+      } finally {
+        clearTimeout(timeoutId)
       }
-
-      nextUrl = body.paging?.next
     }
 
     return metrics
