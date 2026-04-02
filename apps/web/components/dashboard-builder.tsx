@@ -447,10 +447,9 @@ export function DashboardBuilder({ strategyId, initialConfig, metrics }: Dashboa
             layout={layout}
             width={960}
             gridConfig={{ cols: 12, rowHeight: 40 }}
-            dragConfig={isEditing ? { handle: '.drag-handle' } : undefined}
+            dragConfig={isEditing ? { handle: '.drag-handle', enabled: true } : { enabled: false }}
+            resizeConfig={{ enabled: isEditing }}
             onLayoutChange={isEditing ? handleLayoutChange : undefined}
-            isDraggable={isEditing}
-            isResizable={isEditing}
           >
             {widgets.map((widget) => (
               <div
