@@ -24,7 +24,7 @@ import {
   type SortingState,
   useReactTable,
 } from '@tanstack/react-table'
-import { ChevronUp, ChevronDown, ChevronsUpDown, Loader2, Check, RefreshCw, Target, X } from 'lucide-react'
+import { ChevronUp, ChevronDown, ChevronsUpDown, Loader2, Check, RefreshCw, Target, X, Download } from 'lucide-react'
 import { api } from '@/lib/api'
 import { formatCurrency, formatNumber, formatPercent } from '@/lib/utils'
 import { AiChat } from '@/components/ai-chat'
@@ -113,6 +113,21 @@ const columns = [
 
 type TabId = 'metricas' | 'campanhas' | 'dashboard'
 
+function exportCsv(filename: string, headers: string[], rows: (string | number)[][][]) {
+  const escape = (v: string | number) => {
+    const s = String(v)
+    return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
+  }
+  const lines = [headers.map(escape).join(','), ...rows.map((r) => r.flat().map(escape).join(','))]
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 // ─── Campaign Breakdown Table ──────────────────────────────────────────────────
 
 type CampaignSortKey = 'spend' | 'leads' | 'purchases' | 'roas' | 'ctr' | 'cpl' | 'costPerPurchase'
@@ -172,11 +187,37 @@ function CampaignBreakdownTable({
     )
   }
 
+  function handleExport() {
+    const headers = ['Campanha', 'Investimento', ...(isLead ? ['Leads', 'CPL'] : []), ...(isSales ? ['Compras', 'Custo/Compra', 'ROAS'] : []), ...(!isLead && !isSales ? ['ROAS'] : []), 'CTR']
+    const rows = sorted.map((c) => {
+      const t = c.totals
+      const spend = parseFloat(t.spend)
+      return [[
+        c.campaignName ?? c.externalCampaignId,
+        spend.toFixed(2),
+        ...(isLead ? [String(t.leads ?? 0), t.derived.cpl > 0 ? t.derived.cpl.toFixed(2) : '0'] : []),
+        ...(isSales ? [String(t.purchases ?? 0), t.derived.costPerPurchase > 0 ? t.derived.costPerPurchase.toFixed(2) : '0', t.derived.roas.toFixed(2)] : []),
+        ...(!isLead && !isSales ? [t.derived.roas.toFixed(2)] : []),
+        (t.derived.ctr * 100).toFixed(2) + '%',
+      ]]
+    })
+    exportCsv('campanhas.csv', headers, rows)
+  }
+
   return (
     <div className="rounded-lg border bg-card overflow-hidden">
       <div className="px-4 py-3 border-b flex items-center justify-between">
         <h3 className="text-sm font-semibold text-foreground">Campanhas</h3>
-        <span className="text-xs text-muted-foreground">{campaigns.length} campanha{campaigns.length !== 1 ? 's' : ''}</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground">{campaigns.length} campanha{campaigns.length !== 1 ? 's' : ''}</span>
+          <button
+            onClick={handleExport}
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Download className="h-3.5 w-3.5" />
+            CSV
+          </button>
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -700,8 +741,29 @@ export default function StrategyDashboardPage() {
 
           {!isLoading && (metrics?.rows ?? []).length > 0 && (
             <div className="rounded-lg border bg-card overflow-hidden">
-              <div className="px-6 py-4 border-b">
+              <div className="px-6 py-4 border-b flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-foreground">Métricas Diárias</h3>
+                <button
+                  onClick={() => {
+                    const headers = ['Data', 'Impressões', 'Cliques', 'Investimento', 'Receita', 'CTR', 'ROAS', 'CPA', 'Conversões']
+                    const rows = (metrics?.rows ?? []).map((r) => [[
+                      r.date,
+                      String(r.impressions),
+                      String(r.clicks),
+                      parseFloat(r.spend).toFixed(2),
+                      r.revenue ? parseFloat(r.revenue).toFixed(2) : '0',
+                      (r.derived.ctr * 100).toFixed(2) + '%',
+                      r.derived.roas.toFixed(2),
+                      r.derived.cpa.toFixed(2),
+                      String(r.conversions),
+                    ]])
+                    exportCsv(`metricas-${dateRange.from}-${dateRange.to}.csv`, headers, rows)
+                  }}
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  CSV
+                </button>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
