@@ -138,7 +138,7 @@ export async function metaOAuthRoutes(app: FastifyInstance) {
       return reply.redirect(`${frontEndUrl}/clients?error=invalid_state`)
     }
 
-    // 1. Trocar code por token
+    // 1. Trocar code por token de curta duração
     let tokenData: MetaTokenResponse
     try {
       const tokenParams = new URLSearchParams({
@@ -153,6 +153,27 @@ export async function metaOAuthRoutes(app: FastifyInstance) {
     } catch (err) {
       app.log.error({ err }, 'Erro no token exchange do Meta')
       return reply.redirect(`${frontEndUrl}/clients/${clientId}/platforms/meta?error=meta_token_failed`)
+    }
+
+    // 1b. Trocar por long-lived token (válido por 60 dias)
+    try {
+      const exchangeParams = new URLSearchParams({
+        grant_type: 'fb_exchange_token',
+        client_id: appId,
+        client_secret: appSecret,
+        fb_exchange_token: tokenData.access_token,
+      })
+      const exchangeRes = await fetch(`${META_GRAPH_URL}/oauth/access_token?${exchangeParams.toString()}`)
+      if (exchangeRes.ok) {
+        const longLived = await exchangeRes.json() as MetaTokenResponse
+        if (longLived.access_token) {
+          app.log.info({ clientId }, 'Long-lived token obtido com sucesso')
+          tokenData = longLived
+        }
+      }
+    } catch (err) {
+      // Não bloqueia o fluxo — usa o token original como fallback
+      app.log.warn({ err }, 'Falha ao obter long-lived token — usando token original')
     }
 
     // 2. Buscar TODAS as contas de anúncio disponíveis (com paginação)

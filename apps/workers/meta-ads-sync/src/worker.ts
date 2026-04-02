@@ -56,8 +56,16 @@ export async function processMetaAdsSyncJob(job: Job<MetaAdsSyncJob>): Promise<v
     const tokens = await getAdAccountToken(vault, adAccount.vaultSecretPath)
 
     if (!tokens?.access_token) {
-      throw new Error('Token de acesso não encontrado no Vault')
+      throw new Error(`Token não encontrado no Vault (path: ${adAccount.vaultSecretPath})`)
     }
+
+    log.info({
+      adAccountId,
+      vaultPath: adAccount.vaultSecretPath,
+      tokenPreview: `${tokens.access_token.substring(0, 12)}...${tokens.access_token.slice(-6)}`,
+      tokenLength: tokens.access_token.length,
+      expiresAt: tokens.expires_at,
+    }, 'Token lido do Vault')
 
     let accessToken = tokens.access_token
 
