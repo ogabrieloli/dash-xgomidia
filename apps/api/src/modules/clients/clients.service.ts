@@ -62,7 +62,6 @@ export class ClientsService {
           },
         },
         adAccounts: {
-          where: { deletedAt: null },
           select: { id: true, platform: true, name: true, syncStatus: true },
         },
       },
