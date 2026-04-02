@@ -34,6 +34,7 @@ import { DateRangePicker, type DateRangeValue } from '@/components/date-range-pi
 import { DashboardBuilder } from '@/components/dashboard-builder'
 import { StrategyInsights } from '@/components/strategy-insights'
 import { MetricFunnel } from '@/components/metric-funnel'
+import { BudgetPacing } from '@/components/budget-pacing'
 
 interface DerivedMetrics {
   ctr: number; cpc: number; cpa: number; roas: number; cpm: number
@@ -629,6 +630,16 @@ export default function StrategyDashboardPage() {
               loading={isLoading}
             />
           </div>
+
+          {/* Budget pacing */}
+          {!isLoading && strategyInfo?.budget && totals && (
+            <BudgetPacing
+              budget={strategyInfo.budget}
+              spend={spend}
+              dateFrom={dateRange.from}
+              dateTo={dateRange.to}
+            />
+          )}
 
           {/* Painel de metas */}
           {showGoalForm && (
