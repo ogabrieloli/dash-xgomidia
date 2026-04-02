@@ -247,9 +247,9 @@ export function PlatformsSection({ clientId, pendingId }: PlatformsSectionProps)
 
       {/* Modal de seleção de contas */}
       {showSelectionModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-md rounded-xl border bg-background shadow-xl mx-4">
-            <div className="flex items-center justify-between px-5 py-4 border-b">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md bg-background rounded-xl shadow-2xl border flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
               <div>
                 <h2 className="text-sm font-semibold text-foreground">Selecionar contas Meta Ads</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">Escolha quais contas deseja vincular a este cliente</p>
@@ -262,7 +262,7 @@ export function PlatformsSection({ clientId, pendingId }: PlatformsSectionProps)
               </button>
             </div>
 
-            <div className="px-5 py-4">
+            <div className="px-5 py-4 overflow-y-auto flex-1 custom-scrollbar">
               {isPendingLoading ? (
                 <div className="space-y-2">
                   {[...Array(3)].map((_, i) => (
@@ -297,7 +297,7 @@ export function PlatformsSection({ clientId, pendingId }: PlatformsSectionProps)
               )}
             </div>
 
-            <div className="flex items-center justify-between px-5 py-4 border-t bg-muted/20">
+            <div className="flex items-center justify-between px-5 py-4 border-t bg-muted/20 shrink-0">
               <span className="text-xs text-muted-foreground">
                 {selectedExternalIds.size} conta{selectedExternalIds.size !== 1 ? 's' : ''} selecionada{selectedExternalIds.size !== 1 ? 's' : ''}
               </span>
