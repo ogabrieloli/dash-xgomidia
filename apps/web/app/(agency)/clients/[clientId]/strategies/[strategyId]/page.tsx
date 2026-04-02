@@ -25,16 +25,17 @@ import {
   type SortingState,
   useReactTable,
 } from '@tanstack/react-table'
-import { ChevronUp, ChevronDown, ChevronsUpDown, Loader2, Check, RefreshCw, Target, X, Download } from 'lucide-react'
+import { ChevronUp, ChevronDown, ChevronsUpDown, Loader2, Check, RefreshCw, Target, X, Download, SlidersHorizontal, Columns3, Pencil, Edit2 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { formatCurrency, formatNumber, formatPercent } from '@/lib/utils'
 import { AiChat } from '@/components/ai-chat'
 import { KpiCard } from '@/components/kpi-card'
 import { DateRangePicker, type DateRangeValue } from '@/components/date-range-picker'
-import { DashboardBuilder } from '@/components/dashboard-builder'
+import { DashboardBuilder, METRIC_OPTIONS } from '@/components/dashboard-builder'
 import { StrategyInsights } from '@/components/strategy-insights'
 import { MetricFunnel } from '@/components/metric-funnel'
 import { BudgetPacing } from '@/components/budget-pacing'
+import { MetricPickerDrawer } from '@/components/metric-picker-drawer'
 
 interface DerivedMetrics {
   ctr: number; cpc: number; cpa: number; roas: number; cpm: number
@@ -61,18 +62,46 @@ interface MetricsTotals {
   derived: DerivedMetrics
 }
 
-interface StrategyGoals {
+interface MetricConfig {
+  // Goals
   goalRoas?: number
   goalCpl?: number
   goalCpa?: number
   goalCostPerPurchase?: number
+  // View personalization
+  kpiMetrics?: string[]
+  funnelMetrics?: string[]
+  campaignColumns?: string[]
 }
 
 interface Strategy {
   id: string; name: string; funnelType: string; projectId: string
   objective: string | null; budget: number | null
-  metricConfig: StrategyGoals & Record<string, unknown>
+  metricConfig: MetricConfig & Record<string, unknown>
   dashboardConfig: unknown
+}
+
+// ─── Default metric sets by objective ─────────────────────────────────────────
+
+const DEFAULT_KPI_METRICS: Record<string, string[]> = {
+  LEAD:     ['spend', 'leads', 'cpl', 'ctr', 'conversionRate'],
+  SALES:    ['spend', 'revenue', 'roas', 'purchases', 'costPerPurchase'],
+  BRANDING: ['spend', 'reach', 'impressions', 'cpm', 'frequency'],
+  _default: ['spend', 'revenue', 'roas', 'conversions', 'ctr'],
+}
+
+const DEFAULT_FUNNEL_METRICS: Record<string, string[]> = {
+  LEAD:     ['impressions', 'clicks', 'landingPageViews', 'leads', 'conversions'],
+  SALES:    ['impressions', 'clicks', 'addToCart', 'initiateCheckout', 'purchases'],
+  BRANDING: ['reach', 'impressions', 'clicks', 'postEngagement', 'videoViews3s'],
+  _default: ['impressions', 'clicks', 'conversions'],
+}
+
+const DEFAULT_CAMPAIGN_COLUMNS: Record<string, string[]> = {
+  LEAD:     ['spend', 'leads', 'cpl', 'ctr'],
+  SALES:    ['spend', 'purchases', 'costPerPurchase', 'roas'],
+  BRANDING: ['spend', 'reach', 'impressions', 'cpm'],
+  _default: ['spend', 'roas', 'ctr'],
 }
 
 interface CampaignRow {
@@ -132,49 +161,79 @@ function exportCsv(filename: string, headers: string[], rows: (string | number)[
 
 // ─── Campaign Breakdown Table ──────────────────────────────────────────────────
 
-type CampaignSortKey = 'spend' | 'leads' | 'purchases' | 'roas' | 'ctr' | 'cpl' | 'costPerPurchase'
+function getCampaignColValue(c: CampaignRow, key: string): number {
+  const t = c.totals
+  switch (key) {
+    case 'spend': return parseFloat(t.spend)
+    case 'leads': return t.leads ?? 0
+    case 'purchases': return t.purchases ?? 0
+    case 'roas': return t.derived.roas
+    case 'ctr': return t.derived.ctr
+    case 'cpl': return t.derived.cpl
+    case 'costPerPurchase': return t.derived.costPerPurchase
+    case 'cpa': return t.derived.cpa
+    case 'cpc': return t.derived.cpc
+    case 'cpm': return t.derived.cpm
+    case 'impressions': return t.impressions
+    case 'clicks': return t.clicks
+    case 'conversions': return t.conversions
+    case 'reach': return t.reach ?? 0
+    case 'revenue': return parseFloat(t.revenue ?? '0')
+    case 'addToCart': return t.addToCart ?? 0
+    case 'initiateCheckout': return t.initiateCheckout ?? 0
+    case 'viewContent': return t.viewContent ?? 0
+    case 'postEngagement': return t.postEngagement ?? 0
+    case 'videoViews3s': return t.videoViews3s ?? 0
+    case 'completeRegistration': return t.completeRegistration ?? 0
+    case 'landingPageViews': return t.landingPageViews ?? 0
+    case 'linkClicks': return t.linkClicks ?? 0
+    case 'conversionRate': return t.derived.conversionRate
+    case 'cartToCheckoutRate': return t.derived.cartToCheckoutRate
+    case 'checkoutToPurchaseRate': return t.derived.checkoutToPurchaseRate
+    default: return 0
+  }
+}
+
+function formatCampaignColValue(c: CampaignRow, key: string): string {
+  const t = c.totals
+  const opt = METRIC_OPTIONS.find((m) => m.value === key)
+  const raw = getCampaignColValue(c, key)
+  if (raw === 0 && key !== 'conversions' && key !== 'clicks' && key !== 'impressions') return '—'
+  switch (opt?.format) {
+    case 'currency': return formatCurrency(raw)
+    case 'percent': return formatPercent(raw)
+    case 'roas': {
+      const colored = raw >= 2 ? 'text-green-600 font-medium' : raw > 0 && raw < 1 ? 'text-destructive font-medium' : ''
+      // Return as string — color applied below
+      return `${raw.toFixed(2)}x|${colored}`
+    }
+    default: return formatNumber(raw)
+  }
+}
 
 function CampaignBreakdownTable({
   campaigns,
-  objective,
+  columns,
+  onEditColumns,
 }: {
   campaigns: CampaignRow[]
-  objective: string | null
+  columns: string[]
+  onEditColumns?: () => void
 }) {
-  const [sortKey, setSortKey] = useState<CampaignSortKey>('spend')
+  const [sortKey, setSortKey] = useState<string>(columns[0] ?? 'spend')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
-  function toggleSort(key: CampaignSortKey) {
-    if (sortKey === key) {
-      setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
-    } else {
-      setSortKey(key)
-      setSortDir('desc')
-    }
-  }
-
-  function getValue(c: CampaignRow, key: CampaignSortKey): number {
-    const t = c.totals
-    switch (key) {
-      case 'spend': return parseFloat(t.spend)
-      case 'leads': return t.leads ?? 0
-      case 'purchases': return t.purchases ?? 0
-      case 'roas': return t.derived.roas
-      case 'ctr': return t.derived.ctr
-      case 'cpl': return t.derived.cpl
-      case 'costPerPurchase': return t.derived.costPerPurchase
-    }
+  function toggleSort(key: string) {
+    if (sortKey === key) setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+    else { setSortKey(key); setSortDir('desc') }
   }
 
   const sorted = [...campaigns].sort((a, b) => {
-    const diff = getValue(a, sortKey) - getValue(b, sortKey)
+    const diff = getCampaignColValue(a, sortKey) - getCampaignColValue(b, sortKey)
     return sortDir === 'desc' ? -diff : diff
   })
 
-  const isLead = objective === 'LEAD'
-  const isSales = objective === 'SALES'
-
-  function SortHeader({ label, k }: { label: string; k: CampaignSortKey }) {
+  function SortHeader({ label, k }: { label: string; k: string }) {
     const active = sortKey === k
     return (
       <th
@@ -190,19 +249,12 @@ function CampaignBreakdownTable({
   }
 
   function handleExport() {
-    const headers = ['Campanha', 'Investimento', ...(isLead ? ['Leads', 'CPL'] : []), ...(isSales ? ['Compras', 'Custo/Compra', 'ROAS'] : []), ...(!isLead && !isSales ? ['ROAS'] : []), 'CTR']
-    const rows = sorted.map((c) => {
-      const t = c.totals
-      const spend = parseFloat(t.spend)
-      return [[
-        c.campaignName ?? c.externalCampaignId,
-        spend.toFixed(2),
-        ...(isLead ? [String(t.leads ?? 0), t.derived.cpl > 0 ? t.derived.cpl.toFixed(2) : '0'] : []),
-        ...(isSales ? [String(t.purchases ?? 0), t.derived.costPerPurchase > 0 ? t.derived.costPerPurchase.toFixed(2) : '0', t.derived.roas.toFixed(2)] : []),
-        ...(!isLead && !isSales ? [t.derived.roas.toFixed(2)] : []),
-        (t.derived.ctr * 100).toFixed(2) + '%',
-      ]]
-    })
+    const colDefs = columns.map((c) => METRIC_OPTIONS.find((m) => m.value === c))
+    const headers = ['Campanha', ...colDefs.map((d) => d?.label ?? '')]
+    const rows = sorted.map((c) => [[
+      c.campaignName ?? c.externalCampaignId,
+      ...columns.map((col) => String(getCampaignColValue(c, col))),
+    ]])
     exportCsv('campanhas.csv', headers, rows)
   }
 
@@ -212,6 +264,15 @@ function CampaignBreakdownTable({
         <h3 className="text-sm font-semibold text-foreground">Campanhas</h3>
         <div className="flex items-center gap-3">
           <span className="text-xs text-muted-foreground">{campaigns.length} campanha{campaigns.length !== 1 ? 's' : ''}</span>
+          {onEditColumns && (
+            <button
+              onClick={onEditColumns}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Columns3 className="h-3.5 w-3.5" />
+              Colunas
+            </button>
+          )}
           <button
             onClick={handleExport}
             className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -226,50 +287,31 @@ function CampaignBreakdownTable({
           <thead className="bg-muted/40">
             <tr>
               <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Campanha</th>
-              <SortHeader label="Investimento" k="spend" />
-              {isLead && <SortHeader label="Leads" k="leads" />}
-              {isLead && <SortHeader label="CPL" k="cpl" />}
-              {isSales && <SortHeader label="Compras" k="purchases" />}
-              {isSales && <SortHeader label="Custo/Compra" k="costPerPurchase" />}
-              {isSales && <SortHeader label="ROAS" k="roas" />}
-              {!isLead && !isSales && <SortHeader label="ROAS" k="roas" />}
-              <SortHeader label="CTR" k="ctr" />
+              {columns.map((col) => {
+                const opt = METRIC_OPTIONS.find((m) => m.value === col)
+                return <SortHeader key={col} label={opt?.label ?? col} k={col} />
+              })}
             </tr>
           </thead>
           <tbody className="divide-y">
-            {sorted.map((c) => {
-              const t = c.totals
-              const spend = parseFloat(t.spend)
-              return (
-                <tr key={c.externalCampaignId} className="hover:bg-accent/20 transition-colors">
-                  <td className="px-4 py-2.5">
-                    <p className="font-medium text-foreground text-xs leading-tight line-clamp-2 max-w-[240px]">
-                      {c.campaignName ?? c.externalCampaignId}
-                    </p>
-                  </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-xs">{formatCurrency(spend)}</td>
-                  {isLead && <td className="px-3 py-2.5 text-right tabular-nums text-xs">{formatNumber(t.leads ?? 0)}</td>}
-                  {isLead && <td className="px-3 py-2.5 text-right tabular-nums text-xs">{t.derived.cpl > 0 ? formatCurrency(t.derived.cpl) : '—'}</td>}
-                  {isSales && <td className="px-3 py-2.5 text-right tabular-nums text-xs">{formatNumber(t.purchases ?? 0)}</td>}
-                  {isSales && <td className="px-3 py-2.5 text-right tabular-nums text-xs">{t.derived.costPerPurchase > 0 ? formatCurrency(t.derived.costPerPurchase) : '—'}</td>}
-                  {isSales && (
-                    <td className="px-3 py-2.5 text-right tabular-nums text-xs">
-                      <span className={t.derived.roas >= 2 ? 'text-green-600 font-medium' : t.derived.roas > 0 && t.derived.roas < 1 ? 'text-destructive font-medium' : ''}>
-                        {t.derived.roas > 0 ? `${t.derived.roas.toFixed(2)}x` : '—'}
-                      </span>
+            {sorted.map((c) => (
+              <tr key={c.externalCampaignId} className="hover:bg-accent/20 transition-colors">
+                <td className="px-4 py-2.5">
+                  <p className="font-medium text-foreground text-xs leading-tight line-clamp-2 max-w-[240px]">
+                    {c.campaignName ?? c.externalCampaignId}
+                  </p>
+                </td>
+                {columns.map((col) => {
+                  const formatted = formatCampaignColValue(c, col)
+                  const [val, colorClass] = formatted.includes('|') ? formatted.split('|') : [formatted, '']
+                  return (
+                    <td key={col} className="px-3 py-2.5 text-right tabular-nums text-xs">
+                      {colorClass ? <span className={colorClass}>{val}</span> : val}
                     </td>
-                  )}
-                  {!isLead && !isSales && (
-                    <td className="px-3 py-2.5 text-right tabular-nums text-xs">
-                      <span className={t.derived.roas >= 2 ? 'text-green-600 font-medium' : t.derived.roas > 0 && t.derived.roas < 1 ? 'text-destructive font-medium' : ''}>
-                        {t.derived.roas > 0 ? `${t.derived.roas.toFixed(2)}x` : '—'}
-                      </span>
-                    </td>
-                  )}
-                  <td className="px-3 py-2.5 text-right tabular-nums text-xs">{formatPercent(t.derived.ctr)}</td>
-                </tr>
-              )
-            })}
+                  )
+                })}
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -290,7 +332,13 @@ export default function StrategyDashboardPage() {
   const [activeAccountId, setActiveAccountId] = useState<string | null>(null)
   const [campaignAccountId, setCampaignAccountId] = useState<string | null>(null)
   const [showGoalForm, setShowGoalForm] = useState(false)
-  const [goalDraft, setGoalDraft] = useState<StrategyGoals>({})
+  const [goalDraft, setGoalDraft] = useState<MetricConfig>({})
+  // Personalization drawers
+  const [showKpiPicker, setShowKpiPicker] = useState(false)
+  const [showFunnelPicker, setShowFunnelPicker] = useState(false)
+  const [showCampaignColumnsPicker, setShowCampaignColumnsPicker] = useState(false)
+  // Campaign tab mode
+  const [editingCampaigns, setEditingCampaigns] = useState(false)
 
   // Strategy info
   const { data: strategyData } = useQuery({
@@ -488,20 +536,28 @@ export default function StrategyDashboardPage() {
   const strategyInfo = strategyData?.strategy
   const projectInfo = strategyData?.project
 
-  const saveGoalsMutation = useMutation({
-    mutationFn: async (goals: StrategyGoals) => {
+  const saveMetricConfigMutation = useMutation({
+    mutationFn: async (patch: Partial<MetricConfig>) => {
       const current = (strategyInfo?.metricConfig ?? {}) as Record<string, unknown>
       await api.patch(`/api/strategies/${strategyId}/metric-config`, {
-        metricConfig: { ...current, ...goals },
+        metricConfig: { ...current, ...patch },
       })
     },
-    onSuccess: () => {
+    onSuccess: (_data, patch) => {
       void queryClient.invalidateQueries({ queryKey: ['strategy', strategyId] })
-      setShowGoalForm(false)
+      if ('goalRoas' in patch || 'goalCpl' in patch || 'goalCpa' in patch || 'goalCostPerPurchase' in patch) {
+        setShowGoalForm(false)
+      }
     },
   })
 
-  const goals: StrategyGoals = (strategyInfo?.metricConfig ?? {}) as StrategyGoals
+  const savedConfig = (strategyInfo?.metricConfig ?? {}) as MetricConfig
+  const goals = savedConfig as Pick<MetricConfig, 'goalRoas' | 'goalCpl' | 'goalCpa' | 'goalCostPerPurchase'>
+  const objective = strategyInfo?.objective ?? null
+  const objectiveKey = objective ?? '_default'
+  const kpiMetrics = savedConfig.kpiMetrics ?? DEFAULT_KPI_METRICS[objectiveKey] ?? DEFAULT_KPI_METRICS._default
+  const funnelMetrics = savedConfig.funnelMetrics ?? DEFAULT_FUNNEL_METRICS[objectiveKey] ?? DEFAULT_FUNNEL_METRICS._default
+  const campaignColumns = savedConfig.campaignColumns ?? DEFAULT_CAMPAIGN_COLUMNS[objectiveKey] ?? DEFAULT_CAMPAIGN_COLUMNS._default
 
   const linkedIds = new Set(linkedCampaigns?.map((c) => c.externalId) ?? [])
 
@@ -589,46 +645,112 @@ export default function StrategyDashboardPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-            <KpiCard
-              label="Investimento"
-              value={formatCurrency(spend)}
-              change={delta(spend, prev ? parseFloat(prev.spend) : undefined, true)}
-              loading={isLoading}
-            />
-            <KpiCard
-              label="Receita"
-              value={formatCurrency(revenue)}
-              change={delta(revenue, prev ? parseFloat(prev.revenue) : undefined)}
-              loading={isLoading}
-            />
-            <KpiCard
-              label="ROAS"
-              value={totals ? `${totals.derived.roas.toFixed(2)}x` : '—'}
-              change={delta(totals?.derived.roas ?? 0, prev?.derived.roas)}
-              goal={goals.goalRoas}
-              currentRaw={totals?.derived.roas}
-              goalLabel={goals.goalRoas ? `Meta: ${goals.goalRoas}x` : undefined}
-              loading={isLoading}
-            />
-            <KpiCard
-              label="Conversões"
-              value={totals ? formatNumber(totals.conversions) : '—'}
-              sub={totals ? `CPA: ${formatCurrency(totals.derived.cpa)}` : undefined}
-              change={delta(totals?.conversions ?? 0, prev?.conversions)}
-              goal={goals.goalCpa}
-              currentRaw={totals?.derived.cpa}
-              goalLabel={goals.goalCpa ? `Meta CPA: ${formatCurrency(goals.goalCpa)}` : undefined}
-              goalLowerIsBetter
-              loading={isLoading}
-            />
-            <KpiCard
-              label="CTR"
-              value={totals ? formatPercent(totals.derived.ctr) : '—'}
-              sub={totals ? `CPC: ${formatCurrency(totals.derived.cpc)}` : undefined}
-              change={delta(totals?.derived.ctr ?? 0, prev?.derived.ctr)}
-              loading={isLoading}
-            />
+          {/* KPI Cards — dinâmicos */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Métricas Gerais</p>
+              <button
+                onClick={() => setShowKpiPicker(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                Personalizar
+              </button>
+            </div>
+            <div className={`grid grid-cols-2 gap-4 ${kpiMetrics.length <= 3 ? 'lg:grid-cols-3' : kpiMetrics.length === 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-5'}`}>
+              {kpiMetrics.map((metricKey) => {
+                const opt = METRIC_OPTIONS.find((m) => m.value === metricKey)
+                if (!opt || !totals) {
+                  return <KpiCard key={metricKey} label={opt?.label ?? metricKey} value="—" loading={isLoading} />
+                }
+                // Derive value
+                const d = totals.derived
+                let value = '—'
+                let rawVal = 0
+                let sub: string | undefined
+                let goal: number | undefined
+                let currentRaw: number | undefined
+                let goalLabel: string | undefined
+                let goalLowerIsBetter = false
+                let changeVal: number | undefined
+
+                switch (metricKey) {
+                  case 'spend':
+                    rawVal = parseFloat(totals.spend)
+                    value = formatCurrency(rawVal)
+                    changeVal = delta(rawVal, prev ? parseFloat(prev.spend) : undefined, true)
+                    break
+                  case 'revenue':
+                    rawVal = parseFloat(totals.revenue ?? '0')
+                    value = formatCurrency(rawVal)
+                    changeVal = delta(rawVal, prev ? parseFloat(prev.revenue) : undefined)
+                    break
+                  case 'roas':
+                    rawVal = d.roas; value = `${d.roas.toFixed(2)}x`
+                    changeVal = delta(d.roas, prev?.derived.roas)
+                    goal = goals.goalRoas; currentRaw = d.roas
+                    goalLabel = goals.goalRoas ? `Meta: ${goals.goalRoas}x` : undefined
+                    break
+                  case 'conversions':
+                    rawVal = totals.conversions; value = formatNumber(totals.conversions)
+                    sub = `CPA: ${formatCurrency(d.cpa)}`
+                    changeVal = delta(totals.conversions, prev?.conversions)
+                    goal = goals.goalCpa; currentRaw = d.cpa
+                    goalLabel = goals.goalCpa ? `Meta CPA: ${formatCurrency(goals.goalCpa)}` : undefined
+                    goalLowerIsBetter = true
+                    break
+                  case 'ctr':
+                    rawVal = d.ctr; value = formatPercent(d.ctr)
+                    sub = `CPC: ${formatCurrency(d.cpc)}`
+                    changeVal = delta(d.ctr, prev?.derived.ctr)
+                    break
+                  case 'cpc': rawVal = d.cpc; value = formatCurrency(d.cpc); changeVal = delta(d.cpc, prev?.derived.cpc, true); break
+                  case 'cpa': rawVal = d.cpa; value = formatCurrency(d.cpa); changeVal = delta(d.cpa, prev?.derived.cpa, true); break
+                  case 'cpm': rawVal = d.cpm; value = formatCurrency(d.cpm); changeVal = delta(d.cpm, prev?.derived.cpm, true); break
+                  case 'impressions': rawVal = totals.impressions; value = formatNumber(totals.impressions); changeVal = delta(totals.impressions, prev?.impressions); break
+                  case 'clicks': rawVal = totals.clicks; value = formatNumber(totals.clicks); changeVal = delta(totals.clicks, prev?.clicks); break
+                  case 'reach': rawVal = totals.reach ?? 0; value = formatNumber(rawVal); changeVal = delta(rawVal, prev?.reach); break
+                  case 'frequency': rawVal = totals.reach ? totals.impressions / totals.reach : 0; value = rawVal.toFixed(2); break
+                  case 'leads': rawVal = totals.leads ?? 0; value = formatNumber(rawVal); changeVal = delta(rawVal, prev?.leads)
+                    goal = goals.goalCpl; currentRaw = d.cpl; goalLabel = goals.goalCpl ? `Meta CPL: ${formatCurrency(goals.goalCpl)}` : undefined; goalLowerIsBetter = true; break
+                  case 'cpl': rawVal = d.cpl; value = formatCurrency(d.cpl); changeVal = delta(d.cpl, prev?.derived.cpl, true)
+                    goal = goals.goalCpl; currentRaw = d.cpl; goalLabel = goals.goalCpl ? `Meta: ${formatCurrency(goals.goalCpl)}` : undefined; goalLowerIsBetter = true; break
+                  case 'conversionRate': rawVal = d.conversionRate; value = formatPercent(d.conversionRate); changeVal = delta(d.conversionRate, prev?.derived.conversionRate); break
+                  case 'purchases': rawVal = totals.purchases ?? 0; value = formatNumber(rawVal); changeVal = delta(rawVal, prev?.purchases)
+                    goal = goals.goalCostPerPurchase; currentRaw = d.costPerPurchase
+                    goalLabel = goals.goalCostPerPurchase ? `Meta Custo: ${formatCurrency(goals.goalCostPerPurchase)}` : undefined; goalLowerIsBetter = true; break
+                  case 'costPerPurchase': rawVal = d.costPerPurchase; value = formatCurrency(d.costPerPurchase); changeVal = delta(d.costPerPurchase, prev?.derived.costPerPurchase, true)
+                    goal = goals.goalCostPerPurchase; currentRaw = d.costPerPurchase; goalLowerIsBetter = true; break
+                  case 'addToCart': rawVal = totals.addToCart ?? 0; value = formatNumber(rawVal); changeVal = delta(rawVal, prev?.addToCart); break
+                  case 'initiateCheckout': rawVal = totals.initiateCheckout ?? 0; value = formatNumber(rawVal); changeVal = delta(rawVal, prev?.initiateCheckout); break
+                  case 'viewContent': rawVal = totals.viewContent ?? 0; value = formatNumber(rawVal); changeVal = delta(rawVal, prev?.viewContent); break
+                  case 'postEngagement': rawVal = totals.postEngagement ?? 0; value = formatNumber(rawVal); changeVal = delta(rawVal, prev?.postEngagement); break
+                  case 'videoViews3s': rawVal = totals.videoViews3s ?? 0; value = formatNumber(rawVal); changeVal = delta(rawVal, prev?.videoViews3s); break
+                  case 'completeRegistration': rawVal = totals.completeRegistration ?? 0; value = formatNumber(rawVal); break
+                  case 'landingPageViews': rawVal = totals.landingPageViews ?? 0; value = formatNumber(rawVal); break
+                  case 'linkClicks': rawVal = totals.linkClicks ?? 0; value = formatNumber(rawVal); break
+                  case 'cartToCheckoutRate': rawVal = d.cartToCheckoutRate; value = formatPercent(d.cartToCheckoutRate); break
+                  case 'checkoutToPurchaseRate': rawVal = d.checkoutToPurchaseRate; value = formatPercent(d.checkoutToPurchaseRate); break
+                  case 'videoViews': rawVal = totals.videoViews ?? 0; value = formatNumber(rawVal); break
+                  default: value = '—'
+                }
+
+                return (
+                  <KpiCard
+                    key={metricKey}
+                    label={opt.label}
+                    value={value}
+                    sub={sub}
+                    change={changeVal}
+                    goal={goal}
+                    currentRaw={currentRaw}
+                    goalLabel={goalLabel}
+                    goalLowerIsBetter={goalLowerIsBetter}
+                    loading={isLoading}
+                  />
+                )
+              })}
+            </div>
           </div>
 
           {/* Budget pacing */}
@@ -708,11 +830,11 @@ export default function StrategyDashboardPage() {
               </div>
               <div className="flex items-center gap-2 pt-1">
                 <button
-                  onClick={() => saveGoalsMutation.mutate(goalDraft)}
-                  disabled={saveGoalsMutation.isPending}
+                  onClick={() => saveMetricConfigMutation.mutate(goalDraft)}
+                  disabled={saveMetricConfigMutation.isPending}
                   className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
                 >
-                  {saveGoalsMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                  {saveMetricConfigMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                   Salvar metas
                 </button>
                 <button
@@ -725,11 +847,29 @@ export default function StrategyDashboardPage() {
             </div>
           )}
 
+          {/* Funil de performance editável */}
+          {!isLoading && totals && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Funil de Performance</p>
+                <button
+                  onClick={() => setShowFunnelPicker(true)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  Editar Funil
+                </button>
+              </div>
+              <MetricFunnel totals={totals} objective={objective} customMetrics={funnelMetrics} />
+            </div>
+          )}
+
           {/* Breakdown por campanha */}
           {!isLoading && campaignBreakdown && campaignBreakdown.length > 0 && (
             <CampaignBreakdownTable
               campaigns={campaignBreakdown}
-              objective={strategyInfo?.objective ?? null}
+              columns={campaignColumns}
+              onEditColumns={() => setShowCampaignColumnsPicker(true)}
             />
           )}
 
@@ -937,11 +1077,74 @@ export default function StrategyDashboardPage() {
       {/* === TAB: Campanhas === */}
       {activeTab === 'campanhas' && (
         <div className="space-y-4">
-          <div>
-            <p className="text-sm text-muted-foreground mb-4">
-              Vincule campanhas do Meta Ads a esta estratégia. As métricas filtradas serão usadas no dashboard da estratégia.
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              {editingCampaigns
+                ? 'Selecione as campanhas que fazem parte desta estratégia.'
+                : linkedCampaigns && linkedCampaigns.length > 0
+                  ? `${linkedCampaigns.length} campanha${linkedCampaigns.length !== 1 ? 's' : ''} vinculada${linkedCampaigns.length !== 1 ? 's' : ''} — métricas filtradas por essas campanhas.`
+                  : 'Nenhuma campanha vinculada ainda.'}
             </p>
+            <button
+              onClick={() => setEditingCampaigns((v) => !v)}
+              className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs font-medium transition-colors ${
+                editingCampaigns
+                  ? 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
+                  : 'border-input bg-background text-muted-foreground hover:text-foreground hover:bg-accent'
+              }`}
+            >
+              {editingCampaigns ? <Check className="h-3.5 w-3.5" /> : <Edit2 className="h-3.5 w-3.5" />}
+              {editingCampaigns ? 'Concluir' : 'Editar seleção'}
+            </button>
+          </div>
 
+          {/* Modo visualização: apenas campanhas vinculadas */}
+          {!editingCampaigns && (
+            <>
+              {!linkedCampaigns || linkedCampaigns.length === 0 ? (
+                <div className="rounded-lg border border-dashed bg-card p-10 text-center">
+                  <p className="text-sm text-muted-foreground mb-3">Nenhuma campanha vinculada a esta estratégia.</p>
+                  <button
+                    onClick={() => setEditingCampaigns(true)}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                  >
+                    <Edit2 className="h-3.5 w-3.5" />
+                    Vincular campanhas
+                  </button>
+                </div>
+              ) : (
+                <div className="rounded-lg border bg-card overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/40">
+                      <tr>
+                        <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Campanha</th>
+                        <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">ID externo</th>
+                        <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {linkedCampaigns.map((c) => (
+                        <tr key={c.id} className="hover:bg-accent/20 transition-colors">
+                          <td className="px-4 py-3 font-medium text-foreground text-sm">{c.name}</td>
+                          <td className="px-4 py-3 text-xs text-muted-foreground font-mono">{c.externalId}</td>
+                          <td className="px-4 py-3">
+                            <span className="inline-flex items-center rounded-full bg-green-500/15 px-2 py-0.5 text-xs font-medium text-green-600">
+                              <Check className="h-3 w-3 mr-1" /> Vinculada
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Modo edição: lista completa de campanhas disponíveis */}
+          {editingCampaigns && (
+            <>
+          <div>
             {/* Account selector */}
             {accounts && accounts.length > 0 && (
               <div className="flex items-center gap-2 mb-4">
@@ -1029,12 +1232,6 @@ export default function StrategyDashboardPage() {
             </div>
           )}
 
-          {linkedCampaigns && linkedCampaigns.length > 0 && (
-            <p className="text-xs text-muted-foreground">
-              {linkedCampaigns.length} campanha{linkedCampaigns.length !== 1 ? 's' : ''} vinculada{linkedCampaigns.length !== 1 ? 's' : ''} — as métricas desta estratégia serão filtradas por essas campanhas.
-            </p>
-          )}
-
           {/* Sync manual */}
           {accounts && accounts.filter((a) => a.platform === 'META_ADS').length > 0 && (
             <div className="rounded-lg border bg-card p-4 flex items-center justify-between">
@@ -1056,6 +1253,8 @@ export default function StrategyDashboardPage() {
                 {syncMutation.isPending ? 'Sincronizando...' : syncMutation.isSuccess ? 'Sincronizado!' : 'Sincronizar'}
               </button>
             </div>
+          )}
+            </>
           )}
         </div>
       )}
@@ -1099,6 +1298,38 @@ export default function StrategyDashboardPage() {
             </>
           )}
         </div>
+      )}
+
+      {/* ─── Drawers de personalização ───────────────────────────────────────── */}
+      {showKpiPicker && (
+        <MetricPickerDrawer
+          title="Personalizar KPIs"
+          selected={kpiMetrics}
+          minItems={3}
+          maxItems={6}
+          onClose={() => setShowKpiPicker(false)}
+          onChange={(metrics) => saveMetricConfigMutation.mutate({ kpiMetrics: metrics })}
+        />
+      )}
+      {showFunnelPicker && (
+        <MetricPickerDrawer
+          title="Editar Funil"
+          selected={funnelMetrics}
+          minItems={2}
+          maxItems={6}
+          onClose={() => setShowFunnelPicker(false)}
+          onChange={(metrics) => saveMetricConfigMutation.mutate({ funnelMetrics: metrics })}
+        />
+      )}
+      {showCampaignColumnsPicker && (
+        <MetricPickerDrawer
+          title="Colunas da Tabela de Campanhas"
+          selected={campaignColumns}
+          minItems={1}
+          maxItems={6}
+          onClose={() => setShowCampaignColumnsPicker(false)}
+          onChange={(metrics) => saveMetricConfigMutation.mutate({ campaignColumns: metrics })}
+        />
       )}
     </div>
   )

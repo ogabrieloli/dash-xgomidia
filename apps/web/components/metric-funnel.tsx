@@ -8,6 +8,7 @@ interface FunnelTotals {
   reach?: number
   videoViews?: number
   leads?: number
+  completeRegistration?: number
   landingPageViews?: number
   linkClicks?: number
   purchases?: number
@@ -174,11 +175,58 @@ function summaryMetrics(totals: FunnelTotals, objective: string | null | undefin
 interface MetricFunnelProps {
   totals: FunnelTotals
   objective?: string | null
+  /** Quando fornecido, sobrescreve a lógica de objetivo e monta funil personalizado */
+  customMetrics?: string[]
 }
 
-export function MetricFunnel({ totals, objective }: MetricFunnelProps) {
-  const steps = buildSteps(totals, objective)
-  const summary = summaryMetrics(totals, objective)
+// Funnel step built from a custom metric key
+function buildCustomSteps(totals: FunnelTotals, metrics: string[]): FunnelStep[] {
+  const getValue = (key: string): number => {
+    switch (key) {
+      case 'impressions': return totals.impressions
+      case 'clicks': return totals.clicks
+      case 'reach': return totals.reach ?? 0
+      case 'videoViews': return totals.videoViews ?? 0
+      case 'videoViews3s': return totals.videoViews3s ?? 0
+      case 'leads': return totals.leads ?? 0
+      case 'completeRegistration': return totals.completeRegistration ?? 0
+      case 'landingPageViews': return totals.landingPageViews ?? 0
+      case 'linkClicks': return totals.linkClicks ?? 0
+      case 'purchases': return totals.purchases ?? 0
+      case 'addToCart': return totals.addToCart ?? 0
+      case 'initiateCheckout': return totals.initiateCheckout ?? 0
+      case 'viewContent': return totals.viewContent ?? 0
+      case 'postEngagement': return totals.postEngagement ?? 0
+      case 'conversions': return 0  // not in FunnelTotals directly
+      default: return 0
+    }
+  }
+  const LABELS: Record<string, string> = {
+    impressions: 'Impressões', clicks: 'Cliques', reach: 'Alcance', videoViews: 'ThruPlay',
+    videoViews3s: 'Plays 3s', leads: 'Leads', completeRegistration: 'Cadastros',
+    landingPageViews: 'Visitas LP', linkClicks: 'Cliques no link',
+    purchases: 'Compras', addToCart: 'Carrinho', initiateCheckout: 'Checkout',
+    viewContent: 'Ver produto', postEngagement: 'Engajamentos', conversions: 'Conversões',
+  }
+
+  return metrics.map((key, i) => {
+    const value = getValue(key)
+    const prevValue = i > 0 ? getValue(metrics[i - 1]) : 0
+    const rate = prevValue > 0 ? value / prevValue : undefined
+    return {
+      label: LABELS[key] ?? key,
+      value,
+      rateLabel: i > 0 ? 'taxa' : undefined,
+      rate,
+    }
+  })
+}
+
+export function MetricFunnel({ totals, objective, customMetrics }: MetricFunnelProps) {
+  const steps = customMetrics && customMetrics.length > 0
+    ? buildCustomSteps(totals, customMetrics)
+    : buildSteps(totals, objective)
+  const summary = customMetrics && customMetrics.length > 0 ? [] : summaryMetrics(totals, objective)
   const maxVal = steps[0]?.value ?? 1
 
   return (
