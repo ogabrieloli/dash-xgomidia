@@ -895,6 +895,41 @@ export default function StrategyDashboardPage() {
             </div>
           )}
 
+          {/* Alertas proativos — mockado, servidor de e-mail ainda não ativo */}
+          <div className="rounded-lg border bg-card p-5 opacity-70">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Alertas Proativos</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Receba alertas quando uma meta for violada ou o ROAS cair abaixo do esperado.</p>
+              </div>
+              <span className="rounded-full bg-muted px-2.5 py-0.5 text-[10px] font-medium text-muted-foreground">Em breve</span>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="space-y-1">
+                <span className="text-xs text-muted-foreground">E-mail de alerta</span>
+                <input
+                  disabled
+                  placeholder="gestor@agencia.com"
+                  className="w-full rounded-md border border-input bg-muted px-3 py-1.5 text-sm text-muted-foreground cursor-not-allowed"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs text-muted-foreground">Webhook URL</span>
+                <input
+                  disabled
+                  placeholder="https://hooks.slack.com/..."
+                  className="w-full rounded-md border border-input bg-muted px-3 py-1.5 text-sm text-muted-foreground cursor-not-allowed"
+                />
+              </label>
+            </div>
+            <button
+              disabled
+              className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-primary/40 px-4 py-2 text-xs font-medium text-primary-foreground cursor-not-allowed"
+            >
+              Salvar configuração de alertas
+            </button>
+          </div>
+
           <AiChat strategyId={strategyId} clientId={clientId} />
         </>
       )}
