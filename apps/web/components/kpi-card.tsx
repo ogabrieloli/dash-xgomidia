@@ -5,11 +5,15 @@ interface KpiCardProps {
   label: string
   value: string
   sub?: string
-  change?: number   // % de variação vs período anterior (ex: 12.3 = +12.3%)
+  change?: number        // % de variação vs período anterior (ex: 12.3 = +12.3%)
+  goal?: number          // valor-alvo numérico (para barra de progresso)
+  currentRaw?: number    // valor atual numérico correspondente ao goal
+  goalLabel?: string     // ex: "Meta: 3.0x" exibido abaixo da barra
+  goalLowerIsBetter?: boolean  // true para CPL/CPA: estar abaixo da meta é bom
   loading?: boolean
 }
 
-export function KpiCard({ label, value, sub, change, loading }: KpiCardProps) {
+export function KpiCard({ label, value, sub, change, goal, currentRaw, goalLabel, goalLowerIsBetter, loading }: KpiCardProps) {
   if (loading) {
     return (
       <div className="rounded-lg border bg-card p-4 space-y-2 animate-pulse">
@@ -23,6 +27,21 @@ export function KpiCard({ label, value, sub, change, loading }: KpiCardProps) {
   const isPositive = change !== undefined && change > 0
   const isNegative = change !== undefined && change < 0
   const isNeutral = change !== undefined && change === 0
+
+  // Goal progress bar
+  const showGoal = goal !== undefined && currentRaw !== undefined && goal > 0
+  let progressPct = 0
+  let goalMet = false
+  if (showGoal) {
+    if (goalLowerIsBetter) {
+      // Meta é "ser menor que goal". currentRaw <= goal → dentro da meta.
+      progressPct = Math.min(100, (goal / currentRaw!) * 100)
+      goalMet = currentRaw! <= goal
+    } else {
+      progressPct = Math.min(100, (currentRaw! / goal) * 100)
+      goalMet = currentRaw! >= goal
+    }
+  }
 
   return (
     <div className="rounded-lg border bg-card p-4 space-y-1">
@@ -48,6 +67,22 @@ export function KpiCard({ label, value, sub, change, loading }: KpiCardProps) {
           </span>
         )}
       </div>
+
+      {showGoal && (
+        <div className="pt-1 space-y-1">
+          <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+            <div
+              className={cn('h-full rounded-full transition-all', goalMet ? 'bg-green-500' : 'bg-amber-500')}
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            {progressPct.toFixed(0)}% da meta
+            {goalLabel && ` · ${goalLabel}`}
+            {goalMet ? ' ✓' : ''}
+          </p>
+        </div>
+      )}
     </div>
   )
 }

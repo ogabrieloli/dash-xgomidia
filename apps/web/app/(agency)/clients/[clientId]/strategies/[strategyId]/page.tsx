@@ -24,7 +24,7 @@ import {
   type SortingState,
   useReactTable,
 } from '@tanstack/react-table'
-import { ChevronUp, ChevronDown, ChevronsUpDown, Loader2, Check, RefreshCw } from 'lucide-react'
+import { ChevronUp, ChevronDown, ChevronsUpDown, Loader2, Check, RefreshCw, Target, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { formatCurrency, formatNumber, formatPercent } from '@/lib/utils'
 import { AiChat } from '@/components/ai-chat'
@@ -58,9 +58,17 @@ interface MetricsTotals {
   derived: DerivedMetrics
 }
 
+interface StrategyGoals {
+  goalRoas?: number
+  goalCpl?: number
+  goalCpa?: number
+  goalCostPerPurchase?: number
+}
+
 interface Strategy {
   id: string; name: string; funnelType: string; projectId: string
   objective: string | null; budget: number | null
+  metricConfig: StrategyGoals & Record<string, unknown>
   dashboardConfig: unknown
 }
 
@@ -237,6 +245,8 @@ export default function StrategyDashboardPage() {
   const [sorting, setSorting] = useState<SortingState>([{ id: 'date', desc: true }])
   const [activeAccountId, setActiveAccountId] = useState<string | null>(null)
   const [campaignAccountId, setCampaignAccountId] = useState<string | null>(null)
+  const [showGoalForm, setShowGoalForm] = useState(false)
+  const [goalDraft, setGoalDraft] = useState<StrategyGoals>({})
 
   // Strategy info
   const { data: strategyData } = useQuery({
@@ -407,6 +417,22 @@ export default function StrategyDashboardPage() {
 
   const strategyInfo = strategyData?.strategy
   const projectInfo = strategyData?.project
+
+  const saveGoalsMutation = useMutation({
+    mutationFn: async (goals: StrategyGoals) => {
+      const current = (strategyInfo?.metricConfig ?? {}) as Record<string, unknown>
+      await api.patch(`/api/strategies/${strategyId}/metric-config`, {
+        metricConfig: { ...current, ...goals },
+      })
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['strategy', strategyId] })
+      setShowGoalForm(false)
+    },
+  })
+
+  const goals: StrategyGoals = (strategyInfo?.metricConfig ?? {}) as StrategyGoals
+
   const linkedIds = new Set(linkedCampaigns?.map((c) => c.externalId) ?? [])
 
   const TABS: Array<{ id: TabId; label: string }> = [
@@ -435,7 +461,24 @@ export default function StrategyDashboardPage() {
           )}
         </div>
         {activeTab === 'metricas' && (
-          <DateRangePicker value={dateRange} onChange={setDateRange} />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setGoalDraft({
+                  goalRoas: goals.goalRoas,
+                  goalCpl: goals.goalCpl,
+                  goalCpa: goals.goalCpa,
+                  goalCostPerPurchase: goals.goalCostPerPurchase,
+                })
+                setShowGoalForm((v) => !v)
+              }}
+              className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-2 text-xs font-medium hover:bg-accent transition-colors"
+            >
+              <Target className="h-3.5 w-3.5" />
+              Metas
+            </button>
+            <DateRangePicker value={dateRange} onChange={setDateRange} />
+          </div>
         )}
       </div>
 
@@ -493,6 +536,9 @@ export default function StrategyDashboardPage() {
               label="ROAS"
               value={totals ? `${totals.derived.roas.toFixed(2)}x` : '—'}
               change={delta(totals?.derived.roas ?? 0, prev?.derived.roas)}
+              goal={goals.goalRoas}
+              currentRaw={totals?.derived.roas}
+              goalLabel={goals.goalRoas ? `Meta: ${goals.goalRoas}x` : undefined}
               loading={isLoading}
             />
             <KpiCard
@@ -500,6 +546,10 @@ export default function StrategyDashboardPage() {
               value={totals ? formatNumber(totals.conversions) : '—'}
               sub={totals ? `CPA: ${formatCurrency(totals.derived.cpa)}` : undefined}
               change={delta(totals?.conversions ?? 0, prev?.conversions)}
+              goal={goals.goalCpa}
+              currentRaw={totals?.derived.cpa}
+              goalLabel={goals.goalCpa ? `Meta CPA: ${formatCurrency(goals.goalCpa)}` : undefined}
+              goalLowerIsBetter
               loading={isLoading}
             />
             <KpiCard
@@ -510,6 +560,90 @@ export default function StrategyDashboardPage() {
               loading={isLoading}
             />
           </div>
+
+          {/* Painel de metas */}
+          {showGoalForm && (
+            <div className="rounded-lg border bg-card p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold">Metas da Estratégia</h3>
+                <button onClick={() => setShowGoalForm(false)} className="text-muted-foreground hover:text-foreground">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                {(strategyInfo?.objective === 'SALES' || !strategyInfo?.objective) && (
+                  <label className="space-y-1">
+                    <span className="text-xs text-muted-foreground">ROAS alvo</span>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="ex: 3.0"
+                      value={goalDraft.goalRoas ?? ''}
+                      onChange={(e) => setGoalDraft((d) => ({ ...d, goalRoas: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                      className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </label>
+                )}
+                {(strategyInfo?.objective === 'LEAD' || !strategyInfo?.objective) && (
+                  <label className="space-y-1">
+                    <span className="text-xs text-muted-foreground">CPL alvo (R$)</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="ex: 30.00"
+                      value={goalDraft.goalCpl ?? ''}
+                      onChange={(e) => setGoalDraft((d) => ({ ...d, goalCpl: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                      className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </label>
+                )}
+                <label className="space-y-1">
+                  <span className="text-xs text-muted-foreground">CPA alvo (R$)</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="ex: 50.00"
+                    value={goalDraft.goalCpa ?? ''}
+                    onChange={(e) => setGoalDraft((d) => ({ ...d, goalCpa: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </label>
+                {(strategyInfo?.objective === 'SALES' || !strategyInfo?.objective) && (
+                  <label className="space-y-1">
+                    <span className="text-xs text-muted-foreground">Custo por Compra alvo (R$)</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="ex: 80.00"
+                      value={goalDraft.goalCostPerPurchase ?? ''}
+                      onChange={(e) => setGoalDraft((d) => ({ ...d, goalCostPerPurchase: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                      className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </label>
+                )}
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  onClick={() => saveGoalsMutation.mutate(goalDraft)}
+                  disabled={saveGoalsMutation.isPending}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                >
+                  {saveGoalsMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                  Salvar metas
+                </button>
+                <button
+                  onClick={() => setShowGoalForm(false)}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Breakdown por campanha */}
           {!isLoading && campaignBreakdown && campaignBreakdown.length > 0 && (
@@ -780,6 +914,7 @@ export default function StrategyDashboardPage() {
                   totals={strategyMetrics.totals}
                   objective={strategyInfo?.objective}
                   budget={strategyInfo?.budget}
+                  goals={goals}
                 />
               )}
               <DashboardBuilder

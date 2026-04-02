@@ -6,6 +6,7 @@ interface DerivedMetrics {
   ctr: number
   roas: number
   cpl: number
+  cpa: number
   conversionRate: number
   costPerPurchase: number
   cartToCheckoutRate: number
@@ -34,6 +35,7 @@ function computeInsights(
   totals: MetricTotals,
   objective: string | null | undefined,
   budget?: number | null,
+  goals?: StrategyGoals,
 ): Insight[] {
   const insights: Insight[] = []
   const d = totals.derived
@@ -80,6 +82,23 @@ function computeInsights(
     }
   }
 
+  // Comparação com metas definidas
+  if (goals) {
+    if (goals.goalRoas && d.roas > 0 && d.roas < goals.goalRoas) {
+      const pct = ((goals.goalRoas - d.roas) / goals.goalRoas * 100).toFixed(0)
+      insights.push({ severity: 'warning', message: `ROAS ${d.roas.toFixed(2)}x abaixo da meta de ${goals.goalRoas}x (faltam ${pct}%)` })
+    }
+    if (goals.goalCpl && d.cpl > 0 && d.cpl > goals.goalCpl) {
+      insights.push({ severity: 'warning', message: `CPL R$${d.cpl.toFixed(2)} acima da meta de R$${goals.goalCpl.toFixed(2)}` })
+    }
+    if (goals.goalCpa && d.cpa > 0 && d.cpa > goals.goalCpa) {
+      insights.push({ severity: 'warning', message: `CPA R$${d.cpa.toFixed(2)} acima da meta de R$${goals.goalCpa.toFixed(2)}` })
+    }
+    if (goals.goalCostPerPurchase && d.costPerPurchase > 0 && d.costPerPurchase > goals.goalCostPerPurchase) {
+      insights.push({ severity: 'warning', message: `Custo por compra R$${d.costPerPurchase.toFixed(2)} acima da meta de R$${goals.goalCostPerPurchase.toFixed(2)}` })
+    }
+  }
+
   return insights
 }
 
@@ -104,14 +123,22 @@ const SEVERITY_CONFIG = {
   },
 }
 
+interface StrategyGoals {
+  goalRoas?: number
+  goalCpl?: number
+  goalCpa?: number
+  goalCostPerPurchase?: number
+}
+
 interface StrategyInsightsProps {
   totals: MetricTotals
   objective?: string | null
   budget?: number | null
+  goals?: StrategyGoals
 }
 
-export function StrategyInsights({ totals, objective, budget }: StrategyInsightsProps) {
-  const insights = computeInsights(totals, objective, budget)
+export function StrategyInsights({ totals, objective, budget, goals }: StrategyInsightsProps) {
+  const insights = computeInsights(totals, objective, budget, goals)
 
   if (insights.length === 0) return null
 
