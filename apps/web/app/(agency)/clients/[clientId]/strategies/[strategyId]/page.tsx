@@ -1294,6 +1294,8 @@ export default function StrategyDashboardPage() {
                 initialConfig={strategyInfo?.dashboardConfig as import('@/components/dashboard-builder').DashboardConfig | null}
                 metrics={strategyMetrics ?? null}
                 objective={strategyInfo?.objective}
+                campaignData={campaignBreakdown ?? null}
+                metricGoals={goals}
               />
             </>
           )}

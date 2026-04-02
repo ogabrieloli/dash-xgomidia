@@ -9,12 +9,15 @@ import {
   Area,
   BarChart,
   Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
 } from 'recharts'
+import { format } from 'date-fns'
 import { api } from '@/lib/api'
 import { formatCurrency, formatNumber, formatPercent } from '@/lib/utils'
 import type { LayoutItem, Layout } from 'react-grid-layout'
@@ -28,9 +31,17 @@ const GridLayout = dynamic(
 
 export interface DashboardWidget {
   id: string
-  type: 'kpi' | 'area_chart' | 'bar_chart'
+  type: 'kpi' | 'area_chart' | 'bar_chart' | 'line_chart' | 'daily_table' | 'gauge' | 'campaign_ranking'
   metric: string
   label: string
+  goalValue?: number   // used by gauge
+  topN?: number        // used by campaign_ranking (3, 5, or 10)
+}
+
+interface CampaignBreakdownRow {
+  externalCampaignId: string
+  campaignName: string | null
+  totals: MetricTotals
 }
 
 export interface DashboardConfig {
@@ -92,6 +103,9 @@ interface DashboardBuilderProps {
   initialConfig?: DashboardConfig | null
   metrics?: { rows: MetricRow[]; totals: MetricTotals } | null
   objective?: string | null
+  campaignData?: CampaignBreakdownRow[] | null
+  /** Optional metric goals for gauge auto-fill */
+  metricGoals?: { goalRoas?: number; goalCpl?: number; goalCpa?: number; goalCostPerPurchase?: number }
 }
 
 // ─── Metric config ─────────────────────────────────────────────────────────────
@@ -217,9 +231,23 @@ const OBJECTIVE_PRESETS: Record<string, { id: string; label: string; color: stri
 }
 
 const DEFAULT_WIDGET_SIZE: Record<DashboardWidget['type'], { w: number; h: number }> = {
-  kpi:        { w: 3, h: 2 },
-  area_chart: { w: 6, h: 4 },
-  bar_chart:  { w: 6, h: 4 },
+  kpi:              { w: 3, h: 2 },
+  area_chart:       { w: 6, h: 4 },
+  bar_chart:        { w: 6, h: 4 },
+  line_chart:       { w: 6, h: 4 },
+  daily_table:      { w: 6, h: 5 },
+  gauge:            { w: 3, h: 3 },
+  campaign_ranking: { w: 6, h: 4 },
+}
+
+const WIDGET_TYPE_LABELS: Record<DashboardWidget['type'], string> = {
+  kpi:              'KPI',
+  area_chart:       'Área',
+  bar_chart:        'Barras',
+  line_chart:       'Linha',
+  daily_table:      'Tabela',
+  gauge:            'Gauge',
+  campaign_ranking: 'Ranking',
 }
 
 // ─── Value helpers ─────────────────────────────────────────────────────────────
@@ -403,15 +431,195 @@ function ChartWidget({
   )
 }
 
+function LineChartWidget({ widget, metrics }: { widget: DashboardWidget; metrics?: { rows: MetricRow[] } | null }) {
+  const chartData = (metrics?.rows ?? [])
+    .slice()
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((r) => ({ date: r.date.slice(5), value: getChartValue(r, widget.metric) }))
+
+  if (!metrics || chartData.length === 0) {
+    return <div className="flex-1 flex items-center justify-center"><p className="text-xs text-muted-foreground/40 italic">Sem dados para o período</p></div>
+  }
+  return (
+    <div className="flex-1 px-1 pb-2 min-h-0">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+          <XAxis dataKey="date" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
+          <YAxis tick={{ fontSize: 9 }} tickFormatter={(v: number) => formatChartTick(widget.metric, v)} width={40} />
+          <Tooltip formatter={(v: number) => [formatTooltipValue(widget.metric, v), widget.label]} contentStyle={{ fontSize: 11 }} />
+          <Line type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+function DailyTableWidget({ widget, metrics }: { widget: DashboardWidget; metrics?: { rows: MetricRow[] } | null }) {
+  const rows = (metrics?.rows ?? [])
+    .slice()
+    .sort((a, b) => b.date.localeCompare(a.date))
+
+  if (rows.length === 0) {
+    return <div className="flex-1 flex items-center justify-center"><p className="text-xs text-muted-foreground/40 italic">Sem dados para o período</p></div>
+  }
+
+  return (
+    <div className="flex-1 overflow-auto text-xs">
+      <table className="w-full">
+        <thead className="bg-muted/40 sticky top-0">
+          <tr>
+            <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">Data</th>
+            <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">{widget.label}</th>
+            <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Var.</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y">
+          {rows.map((row, i) => {
+            const cur = getChartValue(row, widget.metric)
+            const prev = rows[i + 1] ? getChartValue(rows[i + 1], widget.metric) : undefined
+            const varPct = prev && prev !== 0 ? ((cur - prev) / Math.abs(prev)) * 100 : undefined
+            return (
+              <tr key={row.date} className="hover:bg-accent/20">
+                <td className="px-3 py-1.5 text-muted-foreground">{format(new Date(row.date + 'T00:00:00'), 'dd/MM')}</td>
+                <td className="px-3 py-1.5 text-right tabular-nums font-medium">{formatTooltipValue(widget.metric, cur)}</td>
+                <td className={`px-3 py-1.5 text-right tabular-nums ${varPct === undefined ? 'text-muted-foreground/40' : varPct > 0 ? 'text-green-600' : varPct < 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                  {varPct === undefined ? '—' : `${varPct > 0 ? '+' : ''}${varPct.toFixed(1)}%`}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function GaugeWidget({ widget, metrics }: { widget: DashboardWidget; metrics?: { totals: MetricTotals } | null }) {
+  const current = metrics ? getMetricValue(widget.metric, metrics.totals) : null
+  const rawCurrent = metrics ? (() => {
+    const t = metrics.totals; const d = t.derived
+    switch (widget.metric) {
+      case 'roas': return d.roas; case 'cpl': return d.cpl; case 'cpa': return d.cpa
+      case 'costPerPurchase': return d.costPerPurchase; case 'ctr': return d.ctr
+      case 'spend': return parseFloat(t.spend); case 'revenue': return parseFloat(t.revenue ?? '0')
+      default: return 0
+    }
+  })() : 0
+
+  const goal = widget.goalValue ?? 0
+  const pct = goal > 0 ? Math.min(100, (rawCurrent / goal) * 100) : 0
+  const met = goal > 0 && rawCurrent >= goal
+
+  // SVG arc: 270° sweep starting at 135°
+  const R = 42, cx = 56, cy = 56
+  const toRad = (deg: number) => (deg * Math.PI) / 180
+  const startAngle = 135
+  const endAngle = startAngle + (270 * Math.min(pct, 100)) / 100
+  const x1 = cx + R * Math.cos(toRad(startAngle))
+  const y1 = cy + R * Math.sin(toRad(startAngle))
+  const x2 = cx + R * Math.cos(toRad(endAngle))
+  const y2 = cy + R * Math.sin(toRad(endAngle))
+  const largeArc = endAngle - startAngle > 180 ? 1 : 0
+
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center px-2 pb-2">
+      <svg viewBox="0 0 112 80" className="w-full max-w-[140px]">
+        {/* Track */}
+        <path
+          d={`M ${cx + R * Math.cos(toRad(135))} ${cy + R * Math.sin(toRad(135))} A ${R} ${R} 0 1 1 ${cx + R * Math.cos(toRad(405))} ${cy + R * Math.sin(toRad(405))}`}
+          fill="none" stroke="hsl(var(--muted))" strokeWidth="8" strokeLinecap="round"
+        />
+        {/* Value arc */}
+        {pct > 0 && (
+          <path
+            d={`M ${x1} ${y1} A ${R} ${R} 0 ${largeArc} 1 ${x2} ${y2}`}
+            fill="none"
+            stroke={met ? '#22c55e' : pct > 60 ? '#f59e0b' : 'hsl(var(--primary))'}
+            strokeWidth="8" strokeLinecap="round"
+          />
+        )}
+        {/* Center text */}
+        <text x={cx} y={cy - 4} textAnchor="middle" fontSize="13" fontWeight="700" fill="hsl(var(--foreground))">
+          {goal > 0 ? `${pct.toFixed(0)}%` : current ?? '—'}
+        </text>
+        <text x={cx} y={cy + 10} textAnchor="middle" fontSize="7" fill="hsl(var(--muted-foreground))">
+          {goal > 0 ? `${current} / meta` : widget.label}
+        </text>
+      </svg>
+      {goal > 0 && (
+        <p className="text-[10px] text-muted-foreground text-center">
+          Meta: {formatTooltipValue(widget.metric, goal)}
+          {met && <span className="ml-1 text-green-600 font-medium">✓</span>}
+        </p>
+      )}
+      {!goal && (
+        <p className="text-[10px] text-amber-600 text-center">Configure uma meta para ativar o gauge</p>
+      )}
+    </div>
+  )
+}
+
+function CampaignRankingWidget({ widget, campaignData }: { widget: DashboardWidget; campaignData?: CampaignBreakdownRow[] | null }) {
+  if (!campaignData || campaignData.length === 0) {
+    return <div className="flex-1 flex items-center justify-center"><p className="text-xs text-muted-foreground/40 italic">Sem dados de campanhas</p></div>
+  }
+
+  const topN = widget.topN ?? 5
+  const getValue = (row: CampaignBreakdownRow): number => {
+    const t = row.totals; const d = t.derived
+    switch (widget.metric) {
+      case 'spend': return parseFloat(t.spend); case 'revenue': return parseFloat(t.revenue ?? '0')
+      case 'roas': return d.roas; case 'ctr': return d.ctr; case 'cpc': return d.cpc
+      case 'cpa': return d.cpa; case 'cpl': return d.cpl; case 'leads': return t.leads ?? 0
+      case 'purchases': return t.purchases ?? 0; case 'impressions': return t.impressions
+      case 'clicks': return t.clicks; case 'costPerPurchase': return d.costPerPurchase
+      default: return 0
+    }
+  }
+
+  const sorted = [...campaignData].sort((a, b) => getValue(b) - getValue(a)).slice(0, topN)
+  const maxVal = getValue(sorted[0]) || 1
+
+  return (
+    <div className="flex-1 overflow-auto px-3 py-2 space-y-2">
+      {sorted.map((row) => {
+        const val = getValue(row)
+        const pct = (val / maxVal) * 100
+        return (
+          <div key={row.externalCampaignId}>
+            <div className="flex items-center justify-between mb-0.5">
+              <span className="text-[10px] text-foreground truncate max-w-[60%]" title={row.campaignName ?? row.externalCampaignId}>
+                {row.campaignName ?? row.externalCampaignId}
+              </span>
+              <span className="text-[10px] font-medium tabular-nums text-muted-foreground">
+                {formatTooltipValue(widget.metric, val)}
+              </span>
+            </div>
+            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full rounded-full bg-primary transition-all"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── Main component ────────────────────────────────────────────────────────────
 
-export function DashboardBuilder({ strategyId, initialConfig, metrics, objective }: DashboardBuilderProps) {
+export function DashboardBuilder({ strategyId, initialConfig, metrics, objective, campaignData, metricGoals }: DashboardBuilderProps) {
   const [widgets, setWidgets] = useState<DashboardWidget[]>(initialConfig?.widgets ?? [])
   const [layout, setLayout] = useState<LayoutItem[]>(initialConfig?.layout ?? [])
   const [isEditing, setIsEditing] = useState(false)
   const [saved, setSaved] = useState(false)
   const [selectedMetric, setSelectedMetric] = useState('spend')
   const [selectedType, setSelectedType] = useState<DashboardWidget['type']>('kpi')
+  const [gaugeGoal, setGaugeGoal] = useState('')
+  const [rankingTopN, setRankingTopN] = useState<3 | 5 | 10>(5)
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -426,11 +634,14 @@ export function DashboardBuilder({ strategyId, initialConfig, metrics, objective
     },
   })
 
-  const addWidget = useCallback((type: DashboardWidget['type'], metric: string) => {
+  const addWidget = useCallback((type: DashboardWidget['type'], metric: string, goalValue?: number, topN?: number) => {
     const id = `widget-${Date.now()}`
     const size = DEFAULT_WIDGET_SIZE[type]
     const label = METRIC_OPTIONS.find((m) => m.value === metric)?.label ?? metric
-    setWidgets((prev) => [...prev, { id, type, metric, label }])
+    const widget: DashboardWidget = { id, type, metric, label }
+    if (goalValue) widget.goalValue = goalValue
+    if (topN) widget.topN = topN
+    setWidgets((prev) => [...prev, widget])
     setLayout((prev) => [...prev, { i: id, x: 0, y: Infinity, ...size }])
   }, [])
 
@@ -520,9 +731,38 @@ export function DashboardBuilder({ strategyId, initialConfig, metrics, objective
                 <option value="kpi">KPI</option>
                 <option value="area_chart">Área</option>
                 <option value="bar_chart">Barras</option>
+                <option value="line_chart">Linha</option>
+                <option value="daily_table">Tabela Diária</option>
+                <option value="gauge">Gauge (velocímetro)</option>
+                <option value="campaign_ranking">Ranking Campanhas</option>
               </select>
+              {selectedType === 'gauge' && (
+                <input
+                  type="number"
+                  placeholder="Meta (ex: 3.0)"
+                  value={gaugeGoal}
+                  onChange={(e) => setGaugeGoal(e.target.value)}
+                  className="w-24 rounded-md border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+              {selectedType === 'campaign_ranking' && (
+                <select
+                  value={rankingTopN}
+                  onChange={(e) => setRankingTopN(Number(e.target.value) as 3 | 5 | 10)}
+                  className="rounded-md border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value={3}>Top 3</option>
+                  <option value={5}>Top 5</option>
+                  <option value={10}>Top 10</option>
+                </select>
+              )}
               <button
-                onClick={() => addWidget(selectedType, selectedMetric)}
+                onClick={() => addWidget(
+                  selectedType,
+                  selectedMetric,
+                  selectedType === 'gauge' && gaugeGoal ? parseFloat(gaugeGoal) : undefined,
+                  selectedType === 'campaign_ranking' ? rankingTopN : undefined,
+                )}
                 className="flex items-center gap-1 rounded-md border border-input bg-background px-2 py-1 text-xs hover:bg-accent transition-colors"
               >
                 <Plus className="h-3 w-3" />
@@ -594,7 +834,7 @@ export function DashboardBuilder({ strategyId, initialConfig, metrics, objective
                   )}
                   <span className="text-xs font-medium text-foreground truncate flex-1">{widget.label}</span>
                   <span className="text-xs text-muted-foreground/60 bg-muted/50 rounded px-1 py-0.5 hidden sm:block">
-                    {widget.type === 'kpi' ? 'KPI' : widget.type === 'area_chart' ? 'Área' : 'Barras'}
+                    {WIDGET_TYPE_LABELS[widget.type] ?? widget.type}
                   </span>
                   {isEditing && (
                     <button
@@ -607,15 +847,13 @@ export function DashboardBuilder({ strategyId, initialConfig, metrics, objective
                 </div>
 
                 {/* Widget content */}
-                {widget.type === 'kpi' && (
-                  <KpiWidget widget={widget} metrics={metrics} />
-                )}
-                {widget.type === 'area_chart' && (
-                  <ChartWidget widget={widget} metrics={metrics} type="area" />
-                )}
-                {widget.type === 'bar_chart' && (
-                  <ChartWidget widget={widget} metrics={metrics} type="bar" />
-                )}
+                {widget.type === 'kpi' && <KpiWidget widget={widget} metrics={metrics} />}
+                {widget.type === 'area_chart' && <ChartWidget widget={widget} metrics={metrics} type="area" />}
+                {widget.type === 'bar_chart' && <ChartWidget widget={widget} metrics={metrics} type="bar" />}
+                {widget.type === 'line_chart' && <LineChartWidget widget={widget} metrics={metrics} />}
+                {widget.type === 'daily_table' && <DailyTableWidget widget={widget} metrics={metrics} />}
+                {widget.type === 'gauge' && <GaugeWidget widget={widget} metrics={metrics} />}
+                {widget.type === 'campaign_ranking' && <CampaignRankingWidget widget={widget} campaignData={campaignData} />}
               </div>
             ))}
           </GridLayout>
