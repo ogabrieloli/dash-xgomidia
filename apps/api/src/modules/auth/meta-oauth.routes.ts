@@ -152,14 +152,27 @@ export async function metaOAuthRoutes(app: FastifyInstance) {
       return reply.redirect(`${frontEndUrl}/clients/${clientId}/platforms/meta?error=meta_token_failed`)
     }
 
-    // 2. Buscar contas
-    let adAccounts: MetaAdAccount[]
+    // 2. Buscar TODAS as contas de anúncio disponíveis (com paginação)
+    let adAccounts: MetaAdAccount[] = []
     try {
-      const accountsRes = await fetch(
-        `${META_GRAPH_URL}/me/adaccounts?fields=id,name,currency,timezone_name,account_status&access_token=${tokenData.access_token}`,
-      )
-      const accountsData = await accountsRes.json() as MetaAdAccountsResponse
-      adAccounts = (accountsData.data ?? []).filter(acc => acc.account_status === 1)
+      let nextUrl: string | null = `${META_GRAPH_URL}/me/adaccounts?fields=id,name,currency,timezone_name,account_status&limit=100&access_token=${tokenData.access_token}`
+
+      while (nextUrl) {
+        const accountsRes = await fetch(nextUrl)
+        if (!accountsRes.ok) throw new Error(`Meta API error: ${accountsRes.status}`)
+
+        const accountsData = await accountsRes.json() as any
+        const pageAccounts = (accountsData.data ?? []) as MetaAdAccount[]
+
+        // Apenas contas ativas
+        adAccounts.push(...pageAccounts.filter(acc => acc.account_status === 1))
+
+        // Se houver próxima página, continua o loop
+        nextUrl = accountsData.paging?.next || null
+
+        // Prevenção contra loop infinito (limite de 5000 contas)
+        if (adAccounts.length > 5000) break
+      }
     } catch (err) {
       app.log.error({ err }, 'Erro ao buscar contas do Meta')
       return reply.redirect(`${frontEndUrl}/clients/${clientId}/platforms/meta?error=meta_fetch_failed`)
