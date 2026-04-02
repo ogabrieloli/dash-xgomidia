@@ -17,14 +17,6 @@ import {
   Bar,
   ReferenceLine,
 } from 'recharts'
-import {
-  createColumnHelper,
-  flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
-  type SortingState,
-  useReactTable,
-} from '@tanstack/react-table'
 import { ChevronUp, ChevronDown, ChevronsUpDown, Loader2, Check, RefreshCw, Target, X, Download, SlidersHorizontal, Columns3, Pencil, Edit2 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { formatCurrency, formatNumber, formatPercent } from '@/lib/utils'
@@ -72,6 +64,11 @@ interface MetricConfig {
   kpiMetrics?: string[]
   funnelMetrics?: string[]
   campaignColumns?: string[]
+  // Chart personalization
+  areaMetrics?: string[]
+  barMetric?: string
+  // Daily table personalization
+  dailyColumns?: string[]
 }
 
 interface Strategy {
@@ -104,6 +101,22 @@ const DEFAULT_CAMPAIGN_COLUMNS: Record<string, string[]> = {
   _default: ['spend', 'roas', 'ctr'],
 }
 
+const DEFAULT_AREA_METRICS: Record<string, string[]> = {
+  LEAD:     ['spend', 'leads'],
+  SALES:    ['spend', 'revenue'],
+  BRANDING: ['spend', 'impressions'],
+  _default: ['spend', 'revenue'],
+}
+
+const DEFAULT_BAR_METRIC: Record<string, string> = {
+  LEAD:     'cpl',
+  SALES:    'roas',
+  BRANDING: 'cpm',
+  _default: 'roas',
+}
+
+const DEFAULT_DAILY_COLUMNS = ['impressions', 'clicks', 'spend', 'revenue', 'ctr', 'roas', 'cpa', 'conversions']
+
 interface CampaignRow {
   externalCampaignId: string
   campaignName: string | null
@@ -122,25 +135,6 @@ interface LinkedCampaign {
   id: string; externalId: string; name: string; adAccountId: string
 }
 
-const columnHelper = createColumnHelper<MetricRow>()
-
-const columns = [
-  columnHelper.accessor('date', {
-    header: 'Data',
-    cell: (info) => format(new Date(info.getValue() + 'T00:00:00'), 'dd/MM/yyyy'),
-  }),
-  columnHelper.accessor('impressions', { header: 'Impressões', cell: (info) => formatNumber(info.getValue()) }),
-  columnHelper.accessor('clicks', { header: 'Cliques', cell: (info) => formatNumber(info.getValue()) }),
-  columnHelper.accessor('spend', { header: 'Investimento', cell: (info) => formatCurrency(parseFloat(info.getValue())) }),
-  columnHelper.accessor('conversions', { header: 'Conversões', cell: (info) => formatNumber(info.getValue()) }),
-  columnHelper.accessor('revenue', {
-    header: 'Receita',
-    cell: (info) => { const v = info.getValue(); return v ? formatCurrency(parseFloat(v)) : '—' },
-  }),
-  columnHelper.accessor((row) => row.derived.ctr, { id: 'ctr', header: 'CTR', cell: (info) => formatPercent(info.getValue()) }),
-  columnHelper.accessor((row) => row.derived.roas, { id: 'roas', header: 'ROAS', cell: (info) => `${info.getValue().toFixed(2)}x` }),
-  columnHelper.accessor((row) => row.derived.cpa, { id: 'cpa', header: 'CPA', cell: (info) => formatCurrency(info.getValue()) }),
-]
 
 type TabId = 'metricas' | 'campanhas' | 'dashboard'
 
@@ -209,6 +203,55 @@ function formatCampaignColValue(c: CampaignRow, key: string): string {
     }
     default: return formatNumber(raw)
   }
+}
+
+function getDailyColValue(r: MetricRow, key: string): number {
+  switch (key) {
+    case 'spend': return parseFloat(r.spend)
+    case 'revenue': return r.revenue ? parseFloat(r.revenue) : 0
+    case 'impressions': return r.impressions
+    case 'clicks': return r.clicks
+    case 'conversions': return r.conversions
+    case 'reach': return r.reach ?? 0
+    case 'videoViews': return r.videoViews ?? 0
+    case 'leads': return r.leads ?? 0
+    case 'completeRegistration': return r.completeRegistration ?? 0
+    case 'landingPageViews': return r.landingPageViews ?? 0
+    case 'linkClicks': return r.linkClicks ?? 0
+    case 'purchases': return r.purchases ?? 0
+    case 'addToCart': return r.addToCart ?? 0
+    case 'initiateCheckout': return r.initiateCheckout ?? 0
+    case 'viewContent': return r.viewContent ?? 0
+    case 'postEngagement': return r.postEngagement ?? 0
+    case 'videoViews3s': return r.videoViews3s ?? 0
+    case 'roas': return r.derived.roas
+    case 'ctr': return r.derived.ctr
+    case 'cpa': return r.derived.cpa
+    case 'cpc': return r.derived.cpc
+    case 'cpl': return r.derived.cpl
+    case 'cpm': return r.derived.cpm
+    case 'conversionRate': return r.derived.conversionRate
+    case 'costPerPurchase': return r.derived.costPerPurchase
+    case 'cartToCheckoutRate': return r.derived.cartToCheckoutRate
+    case 'checkoutToPurchaseRate': return r.derived.checkoutToPurchaseRate
+    default: return 0
+  }
+}
+
+function formatDailyColValue(r: MetricRow, key: string): string {
+  const opt = METRIC_OPTIONS.find((m) => m.value === key)
+  const raw = getDailyColValue(r, key)
+  if (raw === 0 && key !== 'conversions' && key !== 'clicks' && key !== 'impressions') return '—'
+  switch (opt?.format) {
+    case 'currency': return formatCurrency(raw)
+    case 'percent': return formatPercent(raw)
+    case 'roas': return `${raw.toFixed(2)}x`
+    default: return formatNumber(raw)
+  }
+}
+
+function getChartValueFromRow(r: MetricRow, key: string): number {
+  return getDailyColValue(r, key)
 }
 
 function CampaignBreakdownTable({
@@ -328,7 +371,6 @@ export default function StrategyDashboardPage() {
     from: format(subDays(new Date(), 30), 'yyyy-MM-dd'),
     to: format(new Date(), 'yyyy-MM-dd'),
   })
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'date', desc: true }])
   const [activeAccountId, setActiveAccountId] = useState<string | null>(null)
   const [campaignAccountId, setCampaignAccountId] = useState<string | null>(null)
   const [showGoalForm, setShowGoalForm] = useState(false)
@@ -337,6 +379,9 @@ export default function StrategyDashboardPage() {
   const [showKpiPicker, setShowKpiPicker] = useState(false)
   const [showFunnelPicker, setShowFunnelPicker] = useState(false)
   const [showCampaignColumnsPicker, setShowCampaignColumnsPicker] = useState(false)
+  const [showAreaChartPicker, setShowAreaChartPicker] = useState(false)
+  const [showBarChartPicker, setShowBarChartPicker] = useState(false)
+  const [showDailyColumnsPicker, setShowDailyColumnsPicker] = useState(false)
   // Campaign tab mode
   const [editingCampaigns, setEditingCampaigns] = useState(false)
 
@@ -493,15 +538,6 @@ export default function StrategyDashboardPage() {
     },
   })
 
-  const table = useReactTable({
-    data: metrics?.rows ?? [],
-    columns,
-    state: { sorting },
-    onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-  })
-
   const totals = metrics?.totals
   const prev = metrics?.previousTotals
   const spend = parseFloat(totals?.spend ?? '0')
@@ -516,12 +552,13 @@ export default function StrategyDashboardPage() {
 
   const chartData = [...(metrics?.rows ?? [])]
     .sort((a, b) => a.date.localeCompare(b.date))
-    .map((r) => ({
-      date: format(new Date(r.date + 'T00:00:00'), 'dd/MM'),
-      spend: parseFloat(r.spend),
-      revenue: r.revenue ? parseFloat(r.revenue) : 0,
-      roas: r.derived.roas,
-    }))
+    .map((r) => {
+      const entry: Record<string, unknown> = { date: format(new Date(r.date + 'T00:00:00'), 'dd/MM') }
+      for (const m of [...areaMetrics, barMetric]) {
+        entry[m] = getChartValueFromRow(r, m)
+      }
+      return entry
+    })
 
   // Annotations: group by date label, collect titles
   const annotationMap = new Map<string, string[]>()
@@ -558,6 +595,9 @@ export default function StrategyDashboardPage() {
   const kpiMetrics = savedConfig.kpiMetrics ?? DEFAULT_KPI_METRICS[objectiveKey] ?? DEFAULT_KPI_METRICS._default
   const funnelMetrics = savedConfig.funnelMetrics ?? DEFAULT_FUNNEL_METRICS[objectiveKey] ?? DEFAULT_FUNNEL_METRICS._default
   const campaignColumns = savedConfig.campaignColumns ?? DEFAULT_CAMPAIGN_COLUMNS[objectiveKey] ?? DEFAULT_CAMPAIGN_COLUMNS._default
+  const areaMetrics = savedConfig.areaMetrics ?? DEFAULT_AREA_METRICS[objectiveKey] ?? DEFAULT_AREA_METRICS._default
+  const barMetric = savedConfig.barMetric ?? DEFAULT_BAR_METRIC[objectiveKey] ?? DEFAULT_BAR_METRIC._default
+  const dailyColumns = savedConfig.dailyColumns ?? DEFAULT_DAILY_COLUMNS
 
   const linkedIds = new Set(linkedCampaigns?.map((c) => c.externalId) ?? [])
 
@@ -873,67 +913,104 @@ export default function StrategyDashboardPage() {
             />
           )}
 
-          {!isLoading && chartData.length > 0 && (
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <div className="rounded-lg border bg-card p-4">
-                <h3 className="text-sm font-semibold text-foreground mb-4">Investimento vs Receita</h3>
-                <ResponsiveContainer width="100%" height={220}>
-                  <AreaChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="spendGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis dataKey="date" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                    <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => `R$${(v / 1000).toFixed(0)}k`} />
-                    <Tooltip
-                      formatter={(v: number, name: string) => [formatCurrency(v), name === 'spend' ? 'Investimento' : 'Receita']}
-                      contentStyle={{ fontSize: 11 }}
-                    />
-                    <Area type="monotone" dataKey="spend" stroke="hsl(var(--primary))" fill="url(#spendGrad)" strokeWidth={2} />
-                    <Area type="monotone" dataKey="revenue" stroke="#22c55e" fill="url(#revenueGrad)" strokeWidth={2} />
-                    {annotations.map((a) => (
-                      <ReferenceLine
-                        key={a.date}
-                        x={a.date}
-                        stroke="#f59e0b"
-                        strokeDasharray="3 3"
-                        label={{ value: '●', position: 'top', fontSize: 8, fill: '#f59e0b' }}
+          {!isLoading && chartData.length > 0 && (() => {
+            const AREA_COLORS = ['hsl(var(--primary))', '#22c55e', '#f59e0b']
+            const barOpt = METRIC_OPTIONS.find((m) => m.value === barMetric)
+            const barLabel = barOpt?.label ?? barMetric
+            const areaLabels = areaMetrics.map((m) => METRIC_OPTIONS.find((o) => o.value === m)?.label ?? m)
+            function fmtTick(metric: string, v: number): string {
+              const opt = METRIC_OPTIONS.find((m) => m.value === metric)
+              if (opt?.format === 'currency') return `R$${(v / 1000).toFixed(0)}k`
+              if (opt?.format === 'percent') return `${(v * 100).toFixed(0)}%`
+              if (opt?.format === 'roas') return `${v.toFixed(1)}x`
+              return formatNumber(v)
+            }
+            function fmtTooltip(metric: string, v: number): string {
+              const opt = METRIC_OPTIONS.find((m) => m.value === metric)
+              if (opt?.format === 'currency') return formatCurrency(v)
+              if (opt?.format === 'percent') return formatPercent(v)
+              if (opt?.format === 'roas') return `${v.toFixed(2)}x`
+              return formatNumber(v)
+            }
+            return (
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                {/* Area Chart */}
+                <div className="rounded-lg border bg-card p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-semibold text-foreground">{areaLabels.join(' vs ')}</h3>
+                    <button
+                      onClick={() => setShowAreaChartPicker(true)}
+                      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Edit2 className="h-3 w-3" />
+                      Editar
+                    </button>
+                  </div>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <AreaChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                      <defs>
+                        {areaMetrics.map((m, i) => (
+                          <linearGradient key={m} id={`areaGrad${i}`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor={AREA_COLORS[i] ?? AREA_COLORS[0]} stopOpacity={0.3} />
+                            <stop offset="95%" stopColor={AREA_COLORS[i] ?? AREA_COLORS[0]} stopOpacity={0} />
+                          </linearGradient>
+                        ))}
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                      <XAxis dataKey="date" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
+                      <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => fmtTick(areaMetrics[0] ?? 'spend', v)} />
+                      <Tooltip
+                        formatter={(v: number, name: string) => {
+                          const idx = areaMetrics.indexOf(name)
+                          return [fmtTooltip(name, v), areaLabels[idx] ?? name]
+                        }}
+                        contentStyle={{ fontSize: 11 }}
                       />
-                    ))}
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
+                      {areaMetrics.map((m, i) => (
+                        <Area
+                          key={m}
+                          type="monotone"
+                          dataKey={m}
+                          stroke={AREA_COLORS[i] ?? AREA_COLORS[0]}
+                          fill={`url(#areaGrad${i})`}
+                          strokeWidth={2}
+                        />
+                      ))}
+                      {annotations.map((a) => (
+                        <ReferenceLine key={a.date} x={a.date} stroke="#f59e0b" strokeDasharray="3 3" label={{ value: '●', position: 'top', fontSize: 8, fill: '#f59e0b' }} />
+                      ))}
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
 
-              <div className="rounded-lg border bg-card p-4">
-                <h3 className="text-sm font-semibold text-foreground mb-4">ROAS Diário</h3>
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis dataKey="date" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                    <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => `${v.toFixed(1)}x`} />
-                    <Tooltip formatter={(v: number) => [`${v.toFixed(2)}x`, 'ROAS']} contentStyle={{ fontSize: 11 }} />
-                    <Bar dataKey="roas" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
-                    {annotations.map((a) => (
-                      <ReferenceLine
-                        key={a.date}
-                        x={a.date}
-                        stroke="#f59e0b"
-                        strokeDasharray="3 3"
-                        label={{ value: '●', position: 'top', fontSize: 8, fill: '#f59e0b' }}
-                      />
-                    ))}
-                  </BarChart>
-                </ResponsiveContainer>
+                {/* Bar Chart */}
+                <div className="rounded-lg border bg-card p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-semibold text-foreground">{barLabel} Diário</h3>
+                    <button
+                      onClick={() => setShowBarChartPicker(true)}
+                      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Edit2 className="h-3 w-3" />
+                      Editar
+                    </button>
+                  </div>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                      <XAxis dataKey="date" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
+                      <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => fmtTick(barMetric, v)} />
+                      <Tooltip formatter={(v: number) => [fmtTooltip(barMetric, v), barLabel]} contentStyle={{ fontSize: 11 }} />
+                      <Bar dataKey={barMetric} fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+                      {annotations.map((a) => (
+                        <ReferenceLine key={a.date} x={a.date} stroke="#f59e0b" strokeDasharray="3 3" label={{ value: '●', position: 'top', fontSize: 8, fill: '#f59e0b' }} />
+                      ))}
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
-            </div>
-          )}
+            )
+          })()}
 
           {/* Legenda de eventos da timeline */}
           {annotations.length > 0 && (
@@ -952,56 +1029,55 @@ export default function StrategyDashboardPage() {
             <div className="rounded-lg border bg-card overflow-hidden">
               <div className="px-6 py-4 border-b flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-foreground">Métricas Diárias</h3>
-                <button
-                  onClick={() => {
-                    const headers = ['Data', 'Impressões', 'Cliques', 'Investimento', 'Receita', 'CTR', 'ROAS', 'CPA', 'Conversões']
-                    const rows = (metrics?.rows ?? []).map((r) => [[
-                      r.date,
-                      String(r.impressions),
-                      String(r.clicks),
-                      parseFloat(r.spend).toFixed(2),
-                      r.revenue ? parseFloat(r.revenue).toFixed(2) : '0',
-                      (r.derived.ctr * 100).toFixed(2) + '%',
-                      r.derived.roas.toFixed(2),
-                      r.derived.cpa.toFixed(2),
-                      String(r.conversions),
-                    ]])
-                    exportCsv(`metricas-${dateRange.from}-${dateRange.to}.csv`, headers, rows)
-                  }}
-                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  CSV
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setShowDailyColumnsPicker(true)}
+                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <Columns3 className="h-3.5 w-3.5" />
+                    Colunas
+                  </button>
+                  <button
+                    onClick={() => {
+                      const colDefs = dailyColumns.map((c) => METRIC_OPTIONS.find((m) => m.value === c))
+                      const headers = ['Data', ...colDefs.map((d) => d?.label ?? '')]
+                      const rows = (metrics?.rows ?? []).map((r) => [[
+                        r.date,
+                        ...dailyColumns.map((col) => String(getDailyColValue(r, col))),
+                      ]])
+                      exportCsv(`metricas-${dateRange.from}-${dateRange.to}.csv`, headers, rows)
+                    }}
+                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    CSV
+                  </button>
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-muted/40">
-                    {table.getHeaderGroups().map((headerGroup) => (
-                      <tr key={headerGroup.id}>
-                        {headerGroup.headers.map((header) => (
-                          <th
-                            key={header.id}
-                            onClick={header.column.getToggleSortingHandler()}
-                            className="px-4 py-3 text-left text-xs font-medium text-muted-foreground cursor-pointer select-none whitespace-nowrap hover:text-foreground"
-                          >
-                            <span className="flex items-center gap-1">
-                              {flexRender(header.column.columnDef.header, header.getContext())}
-                              {header.column.getIsSorted() === 'asc' && <ChevronUp className="h-3 w-3" />}
-                              {header.column.getIsSorted() === 'desc' && <ChevronDown className="h-3 w-3" />}
-                              {!header.column.getIsSorted() && <ChevronsUpDown className="h-3 w-3 opacity-40" />}
-                            </span>
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">Data</th>
+                      {dailyColumns.map((col) => {
+                        const opt = METRIC_OPTIONS.find((m) => m.value === col)
+                        return (
+                          <th key={col} className="px-4 py-3 text-right text-xs font-medium text-muted-foreground whitespace-nowrap">
+                            {opt?.label ?? col}
                           </th>
-                        ))}
-                      </tr>
-                    ))}
+                        )
+                      })}
+                    </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {table.getRowModel().rows.map((row) => (
-                      <tr key={row.id} className="hover:bg-accent/30 transition-colors">
-                        {row.getVisibleCells().map((cell) => (
-                          <td key={cell.id} className="px-4 py-2.5 tabular-nums whitespace-nowrap">
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    {[...(metrics?.rows ?? [])].sort((a, b) => b.date.localeCompare(a.date)).map((row) => (
+                      <tr key={row.date} className="hover:bg-accent/30 transition-colors">
+                        <td className="px-4 py-2.5 tabular-nums whitespace-nowrap text-xs">
+                          {format(new Date(row.date + 'T00:00:00'), 'dd/MM/yyyy')}
+                        </td>
+                        {dailyColumns.map((col) => (
+                          <td key={col} className="px-4 py-2.5 tabular-nums whitespace-nowrap text-right text-xs">
+                            {formatDailyColValue(row, col)}
                           </td>
                         ))}
                       </tr>
@@ -1283,10 +1359,6 @@ export default function StrategyDashboardPage() {
                     budget={strategyInfo?.budget}
                     goals={goals}
                   />
-                  <MetricFunnel
-                    totals={strategyMetrics.totals}
-                    objective={strategyInfo?.objective}
-                  />
                 </>
               )}
               <DashboardBuilder
@@ -1331,6 +1403,36 @@ export default function StrategyDashboardPage() {
           maxItems={6}
           onClose={() => setShowCampaignColumnsPicker(false)}
           onChange={(metrics) => saveMetricConfigMutation.mutate({ campaignColumns: metrics })}
+        />
+      )}
+      {showAreaChartPicker && (
+        <MetricPickerDrawer
+          title="Métricas do Gráfico de Área"
+          selected={areaMetrics}
+          minItems={1}
+          maxItems={2}
+          onClose={() => setShowAreaChartPicker(false)}
+          onChange={(metrics) => saveMetricConfigMutation.mutate({ areaMetrics: metrics })}
+        />
+      )}
+      {showBarChartPicker && (
+        <MetricPickerDrawer
+          title="Métrica do Gráfico de Barras"
+          selected={[barMetric]}
+          minItems={1}
+          maxItems={1}
+          onClose={() => setShowBarChartPicker(false)}
+          onChange={(metrics) => saveMetricConfigMutation.mutate({ barMetric: metrics[0] })}
+        />
+      )}
+      {showDailyColumnsPicker && (
+        <MetricPickerDrawer
+          title="Colunas da Tabela Diária"
+          selected={dailyColumns}
+          minItems={2}
+          maxItems={8}
+          onClose={() => setShowDailyColumnsPicker(false)}
+          onChange={(metrics) => saveMetricConfigMutation.mutate({ dailyColumns: metrics })}
         />
       )}
     </div>

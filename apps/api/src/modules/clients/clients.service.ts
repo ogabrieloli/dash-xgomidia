@@ -57,7 +57,15 @@ export class ClientsService {
             strategies: {
               where: { deletedAt: null },
               orderBy: { name: 'asc' },
-              select: { id: true, name: true, funnelType: true, objective: true },
+              select: {
+                  id: true,
+                  name: true,
+                  funnelType: true,
+                  objective: true,
+                  budget: true,
+                  metricConfig: true,
+                  dashboardConfig: true,
+                },
             },
           },
         },
