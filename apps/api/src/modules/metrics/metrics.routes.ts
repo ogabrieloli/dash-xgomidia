@@ -197,6 +197,34 @@ export async function metricsRoutes(app: FastifyInstance) {
     }
   })
 
+  // GET /api/metrics/campaigns?strategyId=&clientId=&dateFrom=&dateTo=
+  app.get('/campaigns', {
+    preHandler: [authenticate],
+  }, async (request) => {
+    const query = DateRangeQuerySchema.extend({
+      strategyId: z.string().uuid(),
+      clientId: z.string().uuid(),
+      adAccountId: z.string().uuid().optional(),
+    }).parse(request.query)
+
+    await assertClientAccess(request.user.sub, request.user.role, query.clientId, app.db)
+
+    const campaigns = await service.getCampaignBreakdown(
+      query.strategyId,
+      query.clientId,
+      { from: query.dateFrom, to: query.dateTo },
+      query.adAccountId,
+    )
+
+    return {
+      data: campaigns.map((c) => ({
+        externalCampaignId: c.externalCampaignId,
+        campaignName: c.campaignName,
+        totals: serializeTotals(c.totals),
+      })),
+    }
+  })
+
   // GET /api/metrics?adAccountId=&clientId=&dateFrom=&dateTo=
   app.get('/', {
     preHandler: [authenticate],

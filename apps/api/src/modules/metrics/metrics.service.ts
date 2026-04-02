@@ -80,6 +80,12 @@ export interface MetricsResult {
   previousTotals?: MetricTotals
 }
 
+export interface CampaignBreakdown {
+  externalCampaignId: string
+  campaignName: string | null
+  totals: MetricTotals
+}
+
 export interface ClientSummary {
   totals: MetricTotals
 }
@@ -454,5 +460,62 @@ export class MetricsService {
       result.previousTotals = buildTotals(snapshotsToRows(prevSnapshots))
     }
     return result
+  }
+
+  /**
+   * Retorna totais agregados por campanha para uma estratégia.
+   * Útil para o gestor comparar campanhas side-by-side.
+   */
+  async getCampaignBreakdown(
+    strategyId: string,
+    clientId: string,
+    dateRange: DateRange,
+    adAccountId?: string,
+  ): Promise<CampaignBreakdown[]> {
+    const linkedCampaigns = await this.db.strategyCampaign.findMany({
+      where: { strategyId, ...(adAccountId && { adAccountId }) },
+      select: { externalId: true, adAccountId: true },
+    })
+
+    const accounts = await this.db.adAccount.findMany({
+      where: { clientId, ...(adAccountId && { id: adAccountId }) },
+      select: { id: true },
+    })
+
+    const accountIds = accounts.map((a) => a.id)
+    if (accountIds.length === 0) return []
+
+    const where = linkedCampaigns.length > 0
+      ? {
+        adAccountId: { in: linkedCampaigns.map((c) => c.adAccountId) },
+        externalCampaignId: { in: linkedCampaigns.map((c) => c.externalId) },
+        date: { gte: new Date(dateRange.from), lte: new Date(dateRange.to) },
+        NOT: { externalCampaignId: null },
+      }
+      : {
+        adAccountId: { in: accountIds },
+        date: { gte: new Date(dateRange.from), lte: new Date(dateRange.to) },
+        NOT: { externalCampaignId: null },
+      }
+
+    const snapshots = await this.db.metricSnapshot.findMany({ where })
+
+    // Agrupar snapshots por externalCampaignId
+    const groups = new Map<string, typeof snapshots>()
+    for (const s of snapshots) {
+      const key = s.externalCampaignId!
+      const existing = groups.get(key)
+      if (existing) {
+        existing.push(s)
+      } else {
+        groups.set(key, [s])
+      }
+    }
+
+    return Array.from(groups.entries()).map(([externalCampaignId, snaps]) => {
+      const rows = snapshotsToRows(snaps)
+      const campaignName = snaps.find((s) => s.campaignName)?.campaignName ?? null
+      return { externalCampaignId, campaignName, totals: buildTotals(rows) }
+    })
   }
 }

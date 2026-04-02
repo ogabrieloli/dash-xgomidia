@@ -64,6 +64,12 @@ interface Strategy {
   dashboardConfig: unknown
 }
 
+interface CampaignRow {
+  externalCampaignId: string
+  campaignName: string | null
+  totals: MetricsTotals
+}
+
 interface AdAccount {
   id: string; platform: string; externalId: string; name: string; syncStatus: string
 }
@@ -97,6 +103,127 @@ const columns = [
 ]
 
 type TabId = 'metricas' | 'campanhas' | 'dashboard'
+
+// ─── Campaign Breakdown Table ──────────────────────────────────────────────────
+
+type CampaignSortKey = 'spend' | 'leads' | 'purchases' | 'roas' | 'ctr' | 'cpl' | 'costPerPurchase'
+
+function CampaignBreakdownTable({
+  campaigns,
+  objective,
+}: {
+  campaigns: CampaignRow[]
+  objective: string | null
+}) {
+  const [sortKey, setSortKey] = useState<CampaignSortKey>('spend')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+
+  function toggleSort(key: CampaignSortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+    } else {
+      setSortKey(key)
+      setSortDir('desc')
+    }
+  }
+
+  function getValue(c: CampaignRow, key: CampaignSortKey): number {
+    const t = c.totals
+    switch (key) {
+      case 'spend': return parseFloat(t.spend)
+      case 'leads': return t.leads ?? 0
+      case 'purchases': return t.purchases ?? 0
+      case 'roas': return t.derived.roas
+      case 'ctr': return t.derived.ctr
+      case 'cpl': return t.derived.cpl
+      case 'costPerPurchase': return t.derived.costPerPurchase
+    }
+  }
+
+  const sorted = [...campaigns].sort((a, b) => {
+    const diff = getValue(a, sortKey) - getValue(b, sortKey)
+    return sortDir === 'desc' ? -diff : diff
+  })
+
+  const isLead = objective === 'LEAD'
+  const isSales = objective === 'SALES'
+
+  function SortHeader({ label, k }: { label: string; k: CampaignSortKey }) {
+    const active = sortKey === k
+    return (
+      <th
+        onClick={() => toggleSort(k)}
+        className="px-3 py-2.5 text-right text-xs font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground whitespace-nowrap"
+      >
+        <span className="flex items-center justify-end gap-1">
+          {label}
+          {active ? (sortDir === 'desc' ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />) : <ChevronsUpDown className="h-3 w-3 opacity-30" />}
+        </span>
+      </th>
+    )
+  }
+
+  return (
+    <div className="rounded-lg border bg-card overflow-hidden">
+      <div className="px-4 py-3 border-b flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-foreground">Campanhas</h3>
+        <span className="text-xs text-muted-foreground">{campaigns.length} campanha{campaigns.length !== 1 ? 's' : ''}</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/40">
+            <tr>
+              <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Campanha</th>
+              <SortHeader label="Investimento" k="spend" />
+              {isLead && <SortHeader label="Leads" k="leads" />}
+              {isLead && <SortHeader label="CPL" k="cpl" />}
+              {isSales && <SortHeader label="Compras" k="purchases" />}
+              {isSales && <SortHeader label="Custo/Compra" k="costPerPurchase" />}
+              {isSales && <SortHeader label="ROAS" k="roas" />}
+              {!isLead && !isSales && <SortHeader label="ROAS" k="roas" />}
+              <SortHeader label="CTR" k="ctr" />
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {sorted.map((c) => {
+              const t = c.totals
+              const spend = parseFloat(t.spend)
+              return (
+                <tr key={c.externalCampaignId} className="hover:bg-accent/20 transition-colors">
+                  <td className="px-4 py-2.5">
+                    <p className="font-medium text-foreground text-xs leading-tight line-clamp-2 max-w-[240px]">
+                      {c.campaignName ?? c.externalCampaignId}
+                    </p>
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-xs">{formatCurrency(spend)}</td>
+                  {isLead && <td className="px-3 py-2.5 text-right tabular-nums text-xs">{formatNumber(t.leads ?? 0)}</td>}
+                  {isLead && <td className="px-3 py-2.5 text-right tabular-nums text-xs">{t.derived.cpl > 0 ? formatCurrency(t.derived.cpl) : '—'}</td>}
+                  {isSales && <td className="px-3 py-2.5 text-right tabular-nums text-xs">{formatNumber(t.purchases ?? 0)}</td>}
+                  {isSales && <td className="px-3 py-2.5 text-right tabular-nums text-xs">{t.derived.costPerPurchase > 0 ? formatCurrency(t.derived.costPerPurchase) : '—'}</td>}
+                  {isSales && (
+                    <td className="px-3 py-2.5 text-right tabular-nums text-xs">
+                      <span className={t.derived.roas >= 2 ? 'text-green-600 font-medium' : t.derived.roas > 0 && t.derived.roas < 1 ? 'text-destructive font-medium' : ''}>
+                        {t.derived.roas > 0 ? `${t.derived.roas.toFixed(2)}x` : '—'}
+                      </span>
+                    </td>
+                  )}
+                  {!isLead && !isSales && (
+                    <td className="px-3 py-2.5 text-right tabular-nums text-xs">
+                      <span className={t.derived.roas >= 2 ? 'text-green-600 font-medium' : t.derived.roas > 0 && t.derived.roas < 1 ? 'text-destructive font-medium' : ''}>
+                        {t.derived.roas > 0 ? `${t.derived.roas.toFixed(2)}x` : '—'}
+                      </span>
+                    </td>
+                  )}
+                  <td className="px-3 py-2.5 text-right tabular-nums text-xs">{formatPercent(t.derived.ctr)}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
 
 export default function StrategyDashboardPage() {
   const { clientId, strategyId } = useParams<{ clientId: string; strategyId: string }>()
@@ -205,6 +332,19 @@ export default function StrategyDashboardPage() {
             compare: 'true',
           }
         },
+      )
+      return res.data.data
+    },
+  })
+
+  // Campaign breakdown (for Métricas tab)
+  const { data: campaignBreakdown } = useQuery({
+    queryKey: ['metrics-campaigns', strategyId, selectedAccountId, dateRange],
+    enabled: !!selectedAccountId,
+    queryFn: async () => {
+      const res = await api.get<{ data: CampaignRow[] }>(
+        '/api/metrics/campaigns',
+        { params: { strategyId, clientId, adAccountId: selectedAccountId, dateFrom: dateRange.from, dateTo: dateRange.to } },
       )
       return res.data.data
     },
@@ -370,6 +510,14 @@ export default function StrategyDashboardPage() {
               loading={isLoading}
             />
           </div>
+
+          {/* Breakdown por campanha */}
+          {!isLoading && campaignBreakdown && campaignBreakdown.length > 0 && (
+            <CampaignBreakdownTable
+              campaigns={campaignBreakdown}
+              objective={strategyInfo?.objective ?? null}
+            />
+          )}
 
           {!isLoading && chartData.length > 0 && (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
