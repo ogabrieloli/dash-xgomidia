@@ -32,6 +32,7 @@ import { KpiCard } from '@/components/kpi-card'
 import { DateRangePicker, type DateRangeValue } from '@/components/date-range-picker'
 import { DashboardBuilder } from '@/components/dashboard-builder'
 import { StrategyInsights } from '@/components/strategy-insights'
+import { MetricFunnel } from '@/components/metric-funnel'
 
 interface DerivedMetrics {
   ctr: number; cpc: number; cpa: number; roas: number; cpm: number
@@ -910,12 +911,18 @@ export default function StrategyDashboardPage() {
           ) : (
             <>
               {strategyMetrics && (
-                <StrategyInsights
-                  totals={strategyMetrics.totals}
-                  objective={strategyInfo?.objective}
-                  budget={strategyInfo?.budget}
-                  goals={goals}
-                />
+                <>
+                  <StrategyInsights
+                    totals={strategyMetrics.totals}
+                    objective={strategyInfo?.objective}
+                    budget={strategyInfo?.budget}
+                    goals={goals}
+                  />
+                  <MetricFunnel
+                    totals={strategyMetrics.totals}
+                    objective={strategyInfo?.objective}
+                  />
+                </>
               )}
               <DashboardBuilder
                 strategyId={strategyId}
