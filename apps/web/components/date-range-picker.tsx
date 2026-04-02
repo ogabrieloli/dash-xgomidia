@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { DayPicker, type DateRange } from 'react-day-picker'
-import { format, subDays, startOfMonth } from 'date-fns'
+import { format, subDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek, subMonths, subWeeks } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { CalendarDays, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -19,10 +19,16 @@ interface DateRangePickerProps {
 }
 
 const PRESETS = [
-  { label: 'Últimos 7 dias', getDates: () => ({ from: subDays(new Date(), 7), to: new Date() }) },
-  { label: 'Últimos 30 dias', getDates: () => ({ from: subDays(new Date(), 30), to: new Date() }) },
-  { label: 'Últimos 90 dias', getDates: () => ({ from: subDays(new Date(), 90), to: new Date() }) },
-  { label: 'Este mês', getDates: () => ({ from: startOfMonth(new Date()), to: new Date() }) },
+  { label: 'Hoje',             getDates: () => ({ from: new Date(), to: new Date() }) },
+  { label: 'Ontem',            getDates: () => { const y = subDays(new Date(), 1); return { from: y, to: y } } },
+  { label: 'Últimos 7 dias',   getDates: () => ({ from: subDays(new Date(), 6), to: new Date() }) },
+  { label: 'Últimos 14 dias',  getDates: () => ({ from: subDays(new Date(), 13), to: new Date() }) },
+  { label: 'Últimos 30 dias',  getDates: () => ({ from: subDays(new Date(), 29), to: new Date() }) },
+  { label: 'Últimos 90 dias',  getDates: () => ({ from: subDays(new Date(), 89), to: new Date() }) },
+  { label: 'Semana atual',     getDates: () => ({ from: startOfWeek(new Date(), { weekStartsOn: 1 }), to: new Date() }) },
+  { label: 'Semana anterior',  getDates: () => { const w = subWeeks(new Date(), 1); return { from: startOfWeek(w, { weekStartsOn: 1 }), to: endOfWeek(w, { weekStartsOn: 1 }) } } },
+  { label: 'Mês atual',        getDates: () => ({ from: startOfMonth(new Date()), to: new Date() }) },
+  { label: 'Mês anterior',     getDates: () => { const m = subMonths(new Date(), 1); return { from: startOfMonth(m), to: endOfMonth(m) } } },
 ]
 
 export function DateRangePicker({ value, onChange, className }: DateRangePickerProps) {
@@ -89,7 +95,7 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
       {open && (
         <div className="absolute right-0 top-full mt-1 z-50 flex rounded-lg border bg-popover shadow-lg overflow-hidden">
           {/* Presets */}
-          <div className="flex flex-col gap-1 border-r p-3 w-40">
+          <div className="flex flex-col gap-1 border-r p-3 w-44">
             <p className="text-xs font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Atalhos</p>
             {PRESETS.map((preset) => (
               <button
