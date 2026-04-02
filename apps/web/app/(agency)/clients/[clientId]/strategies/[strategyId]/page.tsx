@@ -15,6 +15,7 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
+  ReferenceLine,
 } from 'recharts'
 import {
   createColumnHelper,
@@ -414,6 +415,22 @@ export default function StrategyDashboardPage() {
     },
   })
 
+  // Timeline entries for chart annotations
+  const { data: timelineEntries } = useQuery({
+    queryKey: ['timeline', clientId, dateRange],
+    queryFn: async () => {
+      const res = await api.get<{ data: { id: string; title: string; occurredAt: string; type: string }[] }>(
+        '/api/timeline',
+        { params: { clientId } },
+      )
+      // Filter to entries within the current dateRange
+      return res.data.data.filter((e) => {
+        const d = e.occurredAt.slice(0, 10)
+        return d >= dateRange.from && d <= dateRange.to
+      })
+    },
+  })
+
   // Manual sync
   const syncMutation = useMutation({
     mutationFn: async (adAccountId: string) => {
@@ -456,6 +473,16 @@ export default function StrategyDashboardPage() {
       revenue: r.revenue ? parseFloat(r.revenue) : 0,
       roas: r.derived.roas,
     }))
+
+  // Annotations: group by date label, collect titles
+  const annotationMap = new Map<string, string[]>()
+  for (const entry of timelineEntries ?? []) {
+    const label = format(new Date(entry.occurredAt.slice(0, 10) + 'T00:00:00'), 'dd/MM')
+    const existing = annotationMap.get(label)
+    if (existing) existing.push(entry.title)
+    else annotationMap.set(label, [entry.title])
+  }
+  const annotations = Array.from(annotationMap.entries()).map(([date, titles]) => ({ date, label: titles.join(' · ') }))
 
   const strategyInfo = strategyData?.strategy
   const projectInfo = strategyData?.project
@@ -720,6 +747,15 @@ export default function StrategyDashboardPage() {
                     />
                     <Area type="monotone" dataKey="spend" stroke="hsl(var(--primary))" fill="url(#spendGrad)" strokeWidth={2} />
                     <Area type="monotone" dataKey="revenue" stroke="#22c55e" fill="url(#revenueGrad)" strokeWidth={2} />
+                    {annotations.map((a) => (
+                      <ReferenceLine
+                        key={a.date}
+                        x={a.date}
+                        stroke="#f59e0b"
+                        strokeDasharray="3 3"
+                        label={{ value: '●', position: 'top', fontSize: 8, fill: '#f59e0b' }}
+                      />
+                    ))}
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -733,9 +769,31 @@ export default function StrategyDashboardPage() {
                     <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => `${v.toFixed(1)}x`} />
                     <Tooltip formatter={(v: number) => [`${v.toFixed(2)}x`, 'ROAS']} contentStyle={{ fontSize: 11 }} />
                     <Bar dataKey="roas" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+                    {annotations.map((a) => (
+                      <ReferenceLine
+                        key={a.date}
+                        x={a.date}
+                        stroke="#f59e0b"
+                        strokeDasharray="3 3"
+                        label={{ value: '●', position: 'top', fontSize: 8, fill: '#f59e0b' }}
+                      />
+                    ))}
                   </BarChart>
                 </ResponsiveContainer>
               </div>
+            </div>
+          )}
+
+          {/* Legenda de eventos da timeline */}
+          {annotations.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {annotations.map((a) => (
+                <span key={a.date} className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800">
+                  <span className="font-medium">{a.date}</span>
+                  <span className="text-amber-600">·</span>
+                  {a.label}
+                </span>
+              ))}
             </div>
           )}
 
