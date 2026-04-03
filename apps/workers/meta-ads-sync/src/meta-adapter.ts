@@ -250,7 +250,6 @@ export class MetaAdapter implements PlatformAdapter {
       'spend',
       'reach',
       'inline_link_clicks',
-      'landing_page_view',
       'actions',
       'action_values',
       'video_thruplay_watched_actions',
