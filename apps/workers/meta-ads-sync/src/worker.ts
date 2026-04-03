@@ -15,10 +15,12 @@
 import { Worker, type Job } from 'bullmq'
 import { PrismaClient } from '@prisma/client'
 import pino from 'pino'
+import { subDays } from 'date-fns'
 import type { MetaAdsSyncJob } from '@xgo/shared-types'
 import { QUEUES } from '@xgo/shared-types'
 import { MetaAdapter } from './meta-adapter.js'
 import { getAdAccountToken, storeAdAccountToken } from './vault.js'
+import { collectInstagramSnapshot, attributeGrowth } from './growth-attribution.js'
 import { Redis } from 'ioredis'
 
 const log = pino({ level: process.env['LOG_LEVEL'] ?? 'info' })
@@ -179,6 +181,16 @@ export async function processMetaAdsSyncJob(job: Job<MetaAdsSyncJob>): Promise<v
         syncError: null,
       },
     })
+
+    // 8. Coletar InstagramSnapshot (1x por dia) + calcular atribuição de crescimento
+    const igUserId = await collectInstagramSnapshot(db, clientId, accessToken)
+      .catch((err: Error) => { log.warn({ err: err.message, clientId }, 'Falha ao coletar InstagramSnapshot'); return null })
+
+    if (igUserId) {
+      log.info({ clientId, igUserId }, 'InstagramSnapshot salvo')
+      await attributeGrowth(db, clientId, subDays(new Date(), 1))
+        .catch((err: Error) => log.warn({ err: err.message, clientId }, 'Atribuição de crescimento falhou'))
+    }
 
     log.info({ adAccountId, upsertCount }, 'Sync Meta Ads concluído com sucesso')
   } catch (err) {

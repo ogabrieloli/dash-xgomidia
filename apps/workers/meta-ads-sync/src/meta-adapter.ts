@@ -139,11 +139,13 @@ export class MetaAdapter implements PlatformAdapter {
 
           // Topo de funil social
           const directProfileVisit = extractActionValue(row.actions, 'profile_visit')
-          const igProfileView = extractActionValue(row.actions, 'ig_profile_view')
+          const igProfileView = extractActionValue(row.actions, 'ig_profile_view', 'omni_profile_visit')
           const pageEngagement = extractActionValue(row.actions, 'page_engagement')
 
-          // Fallback: se não houver profile_visit direto, estimar a partir de page_engagement
-          const profileVisits = directProfileVisit || igProfileView || Math.round(pageEngagement * 0.5)
+          // Hierarquia: dado real > ig_profile_view > estimativa conservadora (0.3 de page_engagement)
+          const profileVisits = directProfileVisit > 0 ? directProfileVisit
+            : igProfileView > 0 ? igProfileView
+            : Math.round(pageEngagement * 0.3)
 
           // conversions = soma retrocompatível
           const conversions = purchases + leads + completeRegistration

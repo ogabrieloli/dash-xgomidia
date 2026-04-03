@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z, ZodError } from 'zod'
 import { MetricsService } from './metrics.service.js'
+import { SocialAttributionService } from './social-attribution.service.js'
 import { authenticate, requireRole } from '../../shared/middleware/auth.middleware.js'
 import { assertClientAccess } from '../../shared/guards/client-access.guard.js'
 import { AppError } from '../../shared/errors/index.js'
@@ -223,6 +224,25 @@ export async function metricsRoutes(app: FastifyInstance) {
         totals: serializeTotals(c.totals),
       })),
     }
+  })
+
+  // POST /api/metrics/reprocess-attribution
+  // Body: { clientId, from, to } — recalcula SocialAttributionSnapshot para um range de datas
+  app.post('/reprocess-attribution', {
+    preHandler: [authenticate, requireRole('AGENCY_ADMIN')],
+  }, async (request, reply) => {
+    const body = z.object({
+      clientId: z.string().uuid(),
+      from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    }).parse(request.body)
+
+    await assertClientAccess(request.user.sub, request.user.role, body.clientId, app.db)
+
+    const attribution = new SocialAttributionService(app.db)
+    await attribution.reprocessRange(body.clientId, new Date(body.from), new Date(body.to))
+
+    return reply.send({ data: { ok: true } })
   })
 
   // GET /api/metrics?adAccountId=&clientId=&dateFrom=&dateTo=
