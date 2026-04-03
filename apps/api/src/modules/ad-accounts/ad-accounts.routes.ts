@@ -14,7 +14,7 @@ import { assertClientAccess } from '../../shared/guards/client-access.guard.js'
 import { AppError, NotFoundError } from '../../shared/errors/index.js'
 import { getAdAccountToken } from '../../plugins/vault.js'
 
-const META_API_VERSION = 'v19.0'
+const META_API_VERSION = 'v25.0'
 const META_GRAPH_URL = `https://graph.facebook.com/${META_API_VERSION}`
 
 interface MetaCampaign {

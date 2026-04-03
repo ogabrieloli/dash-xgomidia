@@ -103,6 +103,7 @@ model Client {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime? // soft delete
+  instagramSnapshots InstagramSnapshot[]
 
   @@index([agencyId])
   @@index([slug])
@@ -196,6 +197,7 @@ model AdAccount {
   client    Client             @relation(fields: [clientId], references: [id])
   metrics   MetricSnapshot[]
   campaigns StrategyCampaign[]
+  socialAttributionSnapshots SocialAttributionSnapshot[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -291,6 +293,10 @@ model MetricSnapshot {
   // Objetivo: BRANDING — engajamento
   postEngagement Int @default(0) // action_type: post_engagement (likes+comments+shares)
   videoViews3s   Int @default(0) // action_type: video_view (visualizações ≥3 segundos)
+
+  // Topo de funil social — IG profile visits
+  profileVisits  Int @default(0) // action_type: profile_visit | ig_profile_view
+  pageEngagement Int @default(0) // action_type: page_engagement
 
   // Métricas derivadas são calculadas em runtime (CTR, CPC, CPA, ROAS, CPM, CPL)
   // não armazenadas — calcular no service
@@ -451,4 +457,43 @@ model AuditLog {
   @@index([userId])
   @@index([resourceType, resourceId])
   @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────
+// GROWTH ATTRIBUTION SYSTEM
+// ─────────────────────────────────────────────
+
+model InstagramSnapshot {
+  id             String   @id @default(uuid())
+  clientId       String
+  igUserId       String
+  followersCount Int
+  mediaCount     Int
+  collectedAt    DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, collectedAt])
+}
+
+model SocialAttributionSnapshot {
+  id                  String   @id @default(uuid())
+  adAccountId         String
+  date                DateTime @db.Date
+  externalCampaignId  String?
+
+  // Dados reais agregados do período (dia)
+  followersGainedTotal Int
+  profileVisits       Int      @default(0)
+
+  // Cálculo da atribuição
+  followersEstimated  Float    @default(0)
+  attributionWeight   Float    @default(0)
+
+  adAccount AdAccount @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([adAccountId, date, externalCampaignId])
+  @@index([adAccountId, date])
 }

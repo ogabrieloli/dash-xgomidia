@@ -25,6 +25,9 @@ export interface MetricRow {
   // BRANDING
   postEngagement: number
   videoViews3s: number
+  profileVisits: number
+  pageEngagement: number
+  followersEstimated: number
   derived: {
     ctr: number
     cpc: number
@@ -36,6 +39,9 @@ export interface MetricRow {
     costPerPurchase: number
     cartToCheckoutRate: number
     checkoutToPurchaseRate: number
+    cpf: number
+    followRate: number
+    profileVisitRate: number
   }
 }
 
@@ -60,6 +66,9 @@ export interface MetricTotals {
   // BRANDING
   postEngagement: number
   videoViews3s: number
+  profileVisits: number
+  pageEngagement: number
+  followersEstimated: number
   derived: {
     ctr: number
     cpc: number
@@ -71,6 +80,9 @@ export interface MetricTotals {
     costPerPurchase: number
     cartToCheckoutRate: number
     checkoutToPurchaseRate: number
+    cpf: number
+    followRate: number
+    profileVisitRate: number
   }
 }
 
@@ -116,6 +128,8 @@ function computeDerived(
   purchases: number,
   addToCart: number,
   initiateCheckout: number,
+  profileVisits: number,
+  followersEstimated: number,
 ) {
   const base = calculateDerivedMetrics({
     date: '',
@@ -136,6 +150,10 @@ function computeDerived(
     costPerPurchase: purchases > 0 ? spend / purchases : 0,
     cartToCheckoutRate: addToCart > 0 ? initiateCheckout / addToCart : 0,
     checkoutToPurchaseRate: initiateCheckout > 0 ? purchases / initiateCheckout : 0,
+    // SOCIAL
+    cpf: followersEstimated > 0 ? spend / followersEstimated : 0,
+    followRate: profileVisits > 0 ? followersEstimated / profileVisits : 0,
+    profileVisitRate: impressions > 0 ? profileVisits / impressions : 0,
   }
 }
 
@@ -160,6 +178,9 @@ function buildTotals(rows: MetricRow[]): MetricTotals {
   const viewContent = rows.reduce((s, r) => s + r.viewContent, 0)
   const postEngagement = rows.reduce((s, r) => s + r.postEngagement, 0)
   const videoViews3s = rows.reduce((s, r) => s + r.videoViews3s, 0)
+  const profileVisits = rows.reduce((s, r) => s + r.profileVisits, 0)
+  const pageEngagement = rows.reduce((s, r) => s + r.pageEngagement, 0)
+  const followersEstimated = rows.reduce((s, r) => s + r.followersEstimated, 0)
 
   return {
     impressions,
@@ -179,6 +200,9 @@ function buildTotals(rows: MetricRow[]): MetricTotals {
     viewContent,
     postEngagement,
     videoViews3s,
+    profileVisits,
+    pageEngagement,
+    followersEstimated,
     derived: computeDerived(
       impressions,
       clicks,
@@ -190,6 +214,8 @@ function buildTotals(rows: MetricRow[]): MetricTotals {
       purchases,
       addToCart,
       initiateCheckout,
+      profileVisits,
+      followersEstimated,
     ),
   }
 }
@@ -214,7 +240,14 @@ function snapshotsToRows(
     viewContent: number
     postEngagement: number
     videoViews3s: number
+    profileVisits: number
+    pageEngagement: number
   }>,
+  socialAttributions: Array<{
+    date: Date
+    externalCampaignId: string | null
+    followersEstimated: number
+  }> = [],
 ): MetricRow[] {
   return snapshots.map((s) => {
     const impressions = Number(s.impressions)
@@ -222,6 +255,13 @@ function snapshotsToRows(
     const spend = s.spend.toNumber()
     const conversions = s.conversions
     const revenue = s.revenue?.toNumber() ?? 0
+    const attribution = socialAttributions.find(
+      (a) =>
+        a.date.toISOString().slice(0, 10) ===
+        s.date.toISOString().slice(0, 10) &&
+        a.externalCampaignId === (s as any).externalCampaignId,
+    )
+    const followersEstimated = attribution?.followersEstimated ?? 0
 
     return {
       date: s.date.toISOString().slice(0, 10),
@@ -242,6 +282,9 @@ function snapshotsToRows(
       viewContent: s.viewContent,
       postEngagement: s.postEngagement,
       videoViews3s: s.videoViews3s,
+      profileVisits: s.profileVisits,
+      pageEngagement: s.pageEngagement,
+      followersEstimated,
       derived: computeDerived(
         impressions,
         clicks,
@@ -253,6 +296,8 @@ function snapshotsToRows(
         s.purchases,
         s.addToCart,
         s.initiateCheckout,
+        s.profileVisits,
+        followersEstimated,
       ),
     }
   })
@@ -273,7 +318,17 @@ export class MetricsService {
       orderBy: { date: 'asc' },
     })
 
-    const rows = snapshotsToRows(snapshots)
+    const socialAttributions = await this.db.socialAttributionSnapshot.findMany({
+      where: {
+        adAccountId,
+        date: {
+          gte: new Date(dateRange.from),
+          lte: new Date(dateRange.to),
+        },
+      },
+    })
+
+    const rows = snapshotsToRows(snapshots, socialAttributions)
     return { rows, totals: buildTotals(rows) }
   }
 
@@ -299,7 +354,17 @@ export class MetricsService {
       },
     })
 
-    const rows = snapshotsToRows(snapshots)
+    const socialAttributions = await this.db.socialAttributionSnapshot.findMany({
+      where: {
+        adAccountId: { in: accountIds },
+        date: {
+          gte: new Date(dateRange.from),
+          lte: new Date(dateRange.to),
+        },
+      },
+    })
+
+    const rows = snapshotsToRows(snapshots, socialAttributions)
     return { totals: buildTotals(rows) }
   }
 
@@ -335,7 +400,17 @@ export class MetricsService {
       },
     })
 
-    const rows = snapshotsToRows(snapshots)
+    const socialAttributions = await this.db.socialAttributionSnapshot.findMany({
+      where: {
+        adAccountId: { in: allAccountIds },
+        date: {
+          gte: new Date(dateRange.from),
+          lte: new Date(dateRange.to),
+        },
+      },
+    })
+
+    const rows = snapshotsToRows(snapshots, socialAttributions)
     const totals = buildTotals(rows)
 
     // Build per-client spend map
@@ -445,19 +520,23 @@ export class MetricsService {
         date: { gte: new Date(range.from), lte: new Date(range.to) },
       }
 
-    const [snapshots, prevSnapshots] = await Promise.all([
+    const [snapshots, prevSnapshots, socialAttributions] = await Promise.all([
       this.db.metricSnapshot.findMany({ where: buildWhere(dateRange), orderBy: { date: 'asc' } }),
       compare
         ? this.db.metricSnapshot.findMany({ where: buildWhere(this.previousPeriod(dateRange)) })
         : Promise.resolve(null),
+      this.db.socialAttributionSnapshot.findMany({ where: buildWhere(dateRange) }),
     ])
 
-    const rows = snapshotsToRows(snapshots)
+    const rows = snapshotsToRows(snapshots, socialAttributions)
     const totals = buildTotals(rows)
 
     const result: MetricsResult = { rows, totals }
     if (prevSnapshots) {
-      result.previousTotals = buildTotals(snapshotsToRows(prevSnapshots))
+      const prevSocial = await this.db.socialAttributionSnapshot.findMany({
+        where: buildWhere(this.previousPeriod(dateRange)),
+      })
+      result.previousTotals = buildTotals(snapshotsToRows(prevSnapshots, prevSocial))
     }
     return result
   }
@@ -498,7 +577,10 @@ export class MetricsService {
         NOT: { externalCampaignId: null },
       }
 
-    const snapshots = await this.db.metricSnapshot.findMany({ where })
+    const [snapshots, socialAttributions] = await Promise.all([
+      this.db.metricSnapshot.findMany({ where }),
+      this.db.socialAttributionSnapshot.findMany({ where }),
+    ])
 
     // Agrupar snapshots por externalCampaignId
     const groups = new Map<string, typeof snapshots>()
@@ -513,7 +595,8 @@ export class MetricsService {
     }
 
     return Array.from(groups.entries()).map(([externalCampaignId, snaps]) => {
-      const rows = snapshotsToRows(snaps)
+      const campaignSocial = socialAttributions.filter(a => a.externalCampaignId === externalCampaignId)
+      const rows = snapshotsToRows(snaps, campaignSocial)
       const campaignName = snaps.find((s) => s.campaignName)?.campaignName ?? null
       return { externalCampaignId, campaignName, totals: buildTotals(rows) }
     })

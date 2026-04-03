@@ -17,7 +17,7 @@ import { Queue } from 'bullmq'
 import { QUEUES, type MetaAdsSyncJob } from '@xgo/shared-types'
 import { format, subDays } from 'date-fns'
 
-const META_API_VERSION = 'v19.0'
+const META_API_VERSION = 'v25.0'
 const META_GRAPH_URL = `https://graph.facebook.com/${META_API_VERSION}`
 const META_OAUTH_URL = `https://www.facebook.com/${META_API_VERSION}/dialog/oauth`
 

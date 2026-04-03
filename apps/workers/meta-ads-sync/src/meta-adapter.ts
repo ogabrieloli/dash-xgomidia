@@ -12,7 +12,7 @@
 import type { PlatformAdapter, NormalizedMetric, TokenResponse } from '@xgo/metrics-schema'
 import type { DateRange } from '@xgo/shared-types'
 
-const META_API_VERSION = 'v19.0'
+const META_API_VERSION = 'v25.0'
 const META_GRAPH_URL = `https://graph.facebook.com/${META_API_VERSION}`
 
 interface MetaInsightRow {
@@ -103,6 +103,14 @@ export class MetaAdapter implements PlatformAdapter {
           const postEngagement = extractActionValue(row.actions, 'post_engagement')
           const videoViews3s = extractActionValue(row.actions, 'video_view')
 
+          // Topo de funil social
+          const directProfileVisit = extractActionValue(row.actions, 'profile_visit')
+          const igProfileView = extractActionValue(row.actions, 'ig_profile_view')
+          const pageEngagement = extractActionValue(row.actions, 'page_engagement')
+
+          // Fallback: se não houver profile_visit direto, estimar a partir de page_engagement
+          const profileVisits = directProfileVisit || igProfileView || Math.round(pageEngagement * 0.5)
+
           // conversions = soma retrocompatível
           const conversions = purchases + leads + completeRegistration
 
@@ -124,6 +132,8 @@ export class MetaAdapter implements PlatformAdapter {
             completeRegistration,
             postEngagement,
             videoViews3s,
+            profileVisits,
+            pageEngagement,
             linkClicks: parseInt(row.inline_link_clicks ?? '0', 10) || 0,
             landingPageViews: parseInt(row.landing_page_view ?? '0', 10) || 0,
             rawData: row,

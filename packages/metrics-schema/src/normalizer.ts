@@ -33,6 +33,10 @@ export interface NormalizedMetric {
   postEngagement?: number       // action_type: post_engagement
   videoViews3s?: number         // action_type: video_view (≥3s)
 
+  // Topo de funil social
+  profileVisits?: number        // action_type: profile_visit | ig_profile_view
+  pageEngagement?: number       // action_type: page_engagement
+
   externalCampaignId?: string   // presente quando level=campaign
   campaignName?: string
   rawData: unknown              // dados originais da plataforma — útil para debug

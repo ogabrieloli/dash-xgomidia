@@ -33,6 +33,7 @@ interface DerivedMetrics {
   ctr: number; cpc: number; cpa: number; roas: number; cpm: number
   cpl: number; conversionRate: number; costPerPurchase: number
   cartToCheckoutRate: number; checkoutToPurchaseRate: number
+  cpf: number; followRate: number; profileVisitRate: number
 }
 
 interface MetricRow {
@@ -42,6 +43,7 @@ interface MetricRow {
   leads?: number; completeRegistration?: number; landingPageViews?: number; linkClicks?: number
   purchases?: number; addToCart?: number; initiateCheckout?: number; viewContent?: number
   postEngagement?: number; videoViews3s?: number
+  profileVisits?: number; pageEngagement?: number; followersEstimated?: number
   derived: DerivedMetrics
 }
 
@@ -51,6 +53,7 @@ interface MetricsTotals {
   leads?: number; completeRegistration?: number; landingPageViews?: number; linkClicks?: number
   purchases?: number; addToCart?: number; initiateCheckout?: number; viewContent?: number
   postEngagement?: number; videoViews3s?: number
+  profileVisits?: number; pageEngagement?: number; followersEstimated?: number
   derived: DerivedMetrics
 }
 
@@ -115,7 +118,7 @@ const DEFAULT_BAR_METRIC: Record<string, string> = {
   _default: 'roas',
 }
 
-const DEFAULT_DAILY_COLUMNS = ['impressions', 'clicks', 'spend', 'revenue', 'ctr', 'roas', 'cpa', 'conversions']
+const DEFAULT_DAILY_COLUMNS = ['impressions', 'clicks', 'spend', 'revenue', 'profileVisits', 'followersEstimated', 'cpf', 'followRate']
 
 interface CampaignRow {
   externalCampaignId: string
@@ -184,6 +187,12 @@ function getCampaignColValue(c: CampaignRow, key: string): number {
     case 'conversionRate': return t.derived.conversionRate
     case 'cartToCheckoutRate': return t.derived.cartToCheckoutRate
     case 'checkoutToPurchaseRate': return t.derived.checkoutToPurchaseRate
+    case 'profileVisits': return t.profileVisits ?? 0
+    case 'pageEngagement': return t.pageEngagement ?? 0
+    case 'followersEstimated': return t.followersEstimated ?? 0
+    case 'cpf': return t.derived.cpf
+    case 'followRate': return t.derived.followRate
+    case 'profileVisitRate': return t.derived.profileVisitRate
     default: return 0
   }
 }
@@ -234,6 +243,12 @@ function getDailyColValue(r: MetricRow, key: string): number {
     case 'costPerPurchase': return r.derived.costPerPurchase
     case 'cartToCheckoutRate': return r.derived.cartToCheckoutRate
     case 'checkoutToPurchaseRate': return r.derived.checkoutToPurchaseRate
+    case 'profileVisits': return r.profileVisits ?? 0
+    case 'pageEngagement': return r.pageEngagement ?? 0
+    case 'followersEstimated': return r.followersEstimated ?? 0
+    case 'cpf': return r.derived.cpf
+    case 'followRate': return r.derived.followRate
+    case 'profileVisitRate': return r.derived.profileVisitRate
     default: return 0
   }
 }
