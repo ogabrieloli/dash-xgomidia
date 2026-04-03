@@ -15,8 +15,8 @@
     --card-foreground: 20 14% 11%;
     --popover: 0 0% 100%;
     --popover-foreground: 20 14% 11%;
-    /* Terracota accent — #C8432A */
-    --primary: 12 64% 48%;
+    /* Blue accent — #3B82F6 */
+    --primary: 217 91% 60%;
     --primary-foreground: 0 0% 100%;
     /* Warm light gray secondary */
     --secondary: 42 20% 92%;
@@ -31,7 +31,7 @@
     /* Warm gray border — #E8E2D8 */
     --border: 38 25% 86%;
     --input: 38 25% 86%;
-    --ring: 12 64% 48%;
+    --ring: 217 91% 60%;
     /* 10px radius — mais suave */
     --radius: 0.625rem;
   }

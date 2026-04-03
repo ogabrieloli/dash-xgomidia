@@ -155,8 +155,8 @@ export default function DashboardPage() {
                     boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
                   }}
                 />
-                <Bar dataKey="spend" fill="#C8432A" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="revenue" fill="#C8432A40" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="spend" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="revenue" fill="#3B82F640" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -188,7 +188,7 @@ export default function DashboardPage() {
                     <span className="text-xs font-medium text-stone-300 w-4 tabular-nums">{idx + 1}</span>
                     <Link
                       href={`/clients/${client.clientId}`}
-                      className="text-sm font-medium text-stone-800 hover:text-[#C8432A] transition-colors truncate"
+                      className="text-sm font-medium text-stone-800 hover:text-[#3B82F6] transition-colors truncate"
                     >
                       {client.clientName}
                     </Link>

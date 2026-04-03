@@ -40,7 +40,7 @@ function ClientAvatar({ name, logoUrl, size = 'md' }: { name: string; logoUrl: s
   return (
     <div
       className={`${sizeClass} rounded-xl flex items-center justify-center font-bold text-white flex-shrink-0`}
-      style={{ backgroundColor: '#C8432A' }}
+      style={{ backgroundColor: '#3B82F6' }}
     >
       {name[0]?.toUpperCase()}
     </div>
@@ -81,9 +81,9 @@ export default function ClientsPage() {
         <Link
           href="/clients/new"
           className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors"
-          style={{ backgroundColor: '#C8432A' }}
-          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#B03A24' }}
-          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#C8432A' }}
+          style={{ backgroundColor: '#3B82F6' }}
+          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#2563EB' }}
+          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#3B82F6' }}
         >
           <Plus className="h-4 w-4" />
           Novo cliente
@@ -98,7 +98,7 @@ export default function ClientsPage() {
           placeholder="Buscar clientes..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-[#E8E2D8] bg-white text-sm text-stone-800 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-[#C8432A]/30 focus:border-[#C8432A]"
+          className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-[#E8E2D8] bg-white text-sm text-stone-800 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/30 focus:border-[#3B82F6]"
         />
       </div>
 
@@ -118,7 +118,7 @@ export default function ClientsPage() {
           <Link
             href="/clients/new"
             className="mt-4 text-sm font-medium transition-colors"
-            style={{ color: '#C8432A' }}
+            style={{ color: '#3B82F6' }}
           >
             Cadastrar primeiro cliente →
           </Link>
@@ -170,7 +170,7 @@ export default function ClientsPage() {
                   )}
                 </div>
                 <ArrowRight
-                  className="h-4 w-4 text-stone-300 group-hover:text-[#C8432A] group-hover:translate-x-0.5 transition-all"
+                  className="h-4 w-4 text-stone-300 group-hover:text-[#3B82F6] group-hover:translate-x-0.5 transition-all"
                 />
               </div>
             </Link>

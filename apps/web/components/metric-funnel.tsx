@@ -226,15 +226,15 @@ const CYL_H = CAP_H * 2 + BODY_H  // 70px total per cylinder
 const GAP_H = 56    // gap between cylinders (particles + rate badge)
 const MIN_W = 20    // minimum width % of funnel container
 
-// ─── Color scale: terracota → dusty salmon ────────────────────────────────────
+// ─── Color scale: blue-500 → sky ─────────────────────────────────────────────
 
 const PALETTE = [
-  { body: '#C8432A', hi: '#E06B55', lo: '#922F1A' },
-  { body: '#CF5540', hi: '#E07D68', lo: '#9E3D2C' },
-  { body: '#D66858', hi: '#E58E7E', lo: '#A44B3E' },
-  { body: '#DC7B70', hi: '#EA9F96', lo: '#AA5A52' },
-  { body: '#E18E88', hi: '#EEB0AB', lo: '#B06960' },
-  { body: '#E6A09C', hi: '#F2C0BC', lo: '#B67872' },
+  { body: '#3B82F6', hi: '#60A5FA', lo: '#1D4ED8' },
+  { body: '#4D8EF7', hi: '#73B2F9', lo: '#2460D9' },
+  { body: '#5F9AF8', hi: '#86BEFA', lo: '#2B6EDB' },
+  { body: '#72A7F9', hi: '#99CAFB', lo: '#3278DD' },
+  { body: '#84B2FA', hi: '#ABD4FC', lo: '#3981DF' },
+  { body: '#97BEFB', hi: '#BEDEFF', lo: '#408AE1' },
 ]
 
 // ─── Deterministic particle config (stable across renders) ───────────────────
@@ -352,8 +352,8 @@ function ParticleStream({ spreadPct }: ParticleStreamProps) {
               width: p.sz,
               height: p.sz,
               borderRadius: '50%',
-              background: `radial-gradient(circle at 35% 35%, rgba(230,100,80,0.9), rgba(200,67,42,0.6))`,
-              boxShadow: '0 0 5px rgba(200,67,42,0.45)',
+              background: `radial-gradient(circle at 35% 35%, rgba(147,197,253,0.95), rgba(59,130,246,0.65))`,
+              boxShadow: '0 0 6px rgba(59,130,246,0.40)',
               animationName: p.big ? 'funnelParticle' : 'funnelParticleSmall',
               animationDuration: `${p.dur}s`,
               animationDelay: `${p.del}s`,

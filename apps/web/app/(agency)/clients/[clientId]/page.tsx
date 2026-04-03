@@ -95,7 +95,7 @@ function ClientAvatar({ name, logoUrl, size = 'md' }: { name: string; logoUrl: s
   return (
     <div
       className={`${sizeClass} rounded-xl flex items-center justify-center font-bold text-white flex-shrink-0`}
-      style={{ backgroundColor: '#C8432A' }}
+      style={{ backgroundColor: '#3B82F6' }}
     >
       {name[0]?.toUpperCase()}
     </div>
@@ -233,7 +233,7 @@ export default function ClientDetailPage() {
             <div className="flex items-center gap-2 mt-3 text-xs text-stone-400">
               <span
                 className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium"
-                style={{ backgroundColor: '#FEF3EE', color: '#C8432A' }}
+                style={{ backgroundColor: '#EFF6FF', color: '#3B82F6' }}
               >
                 {client.adAccounts.length} plataforma{client.adAccounts.length !== 1 ? 's' : ''}
               </span>
@@ -247,9 +247,9 @@ export default function ClientDetailPage() {
           <button
             onClick={() => setShowProjectForm(true)}
             className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors flex-shrink-0"
-            style={{ backgroundColor: '#C8432A' }}
-            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#B03A24' }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#C8432A' }}
+            style={{ backgroundColor: '#3B82F6' }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#2563EB' }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#3B82F6' }}
           >
             <Plus className="h-4 w-4" />
             Novo projeto
@@ -277,7 +277,7 @@ export default function ClientDetailPage() {
                 type="url"
                 value={logoInput}
                 onChange={(e) => setLogoInput(e.target.value)}
-                className="flex-1 rounded-xl border border-[#E8E2D8] bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#C8432A]/30 focus:border-[#C8432A]"
+                className="flex-1 rounded-xl border border-[#E8E2D8] bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/30 focus:border-[#3B82F6]"
                 placeholder="https://exemplo.com/logo.png"
               />
             </div>
@@ -286,7 +286,7 @@ export default function ClientDetailPage() {
                 onClick={() => updateLogoMutation.mutate(logoInput)}
                 disabled={updateLogoMutation.isPending}
                 className="flex-1 rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-                style={{ backgroundColor: '#C8432A' }}
+                style={{ backgroundColor: '#3B82F6' }}
               >
                 {updateLogoMutation.isPending ? 'Salvando...' : 'Salvar'}
               </button>
@@ -322,7 +322,7 @@ export default function ClientDetailPage() {
                   <input
                     type="text"
                     placeholder="Nome do projeto"
-                    className="w-full rounded-lg border border-[#E8E2D8] bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#C8432A]/30 focus:border-[#C8432A]"
+                    className="w-full rounded-lg border border-[#E8E2D8] bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/30 focus:border-[#3B82F6]"
                     {...projectForm.register('name')}
                   />
                   {projectForm.formState.errors.name && (
@@ -333,7 +333,7 @@ export default function ClientDetailPage() {
                   type="submit"
                   disabled={projectMutation.isPending}
                   className="rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-                  style={{ backgroundColor: '#C8432A' }}
+                  style={{ backgroundColor: '#3B82F6' }}
                 >
                   Criar
                 </button>
@@ -357,7 +357,7 @@ export default function ClientDetailPage() {
               <button
                 onClick={() => setShowProjectForm(true)}
                 className="mt-3 text-sm font-medium transition-colors"
-                style={{ color: '#C8432A' }}
+                style={{ color: '#3B82F6' }}
               >
                 Criar primeiro projeto →
               </button>
@@ -392,7 +392,7 @@ export default function ClientDetailPage() {
                             <Link
                               key={strategy.id}
                               href={`/clients/${clientId}/strategies/${strategy.id}`}
-                              className="group bg-white rounded-xl border border-[#E8E2D8] p-4 hover:shadow-sm hover:border-[#C8432A]/30 transition-all flex flex-col gap-2"
+                              className="group bg-white rounded-xl border border-[#E8E2D8] p-4 hover:shadow-sm hover:border-[#3B82F6]/30 transition-all flex flex-col gap-2"
                             >
                               <div className="flex items-start justify-between gap-2">
                                 <p className="font-medium text-stone-800 text-sm leading-tight">{strategy.name}</p>
@@ -408,7 +408,7 @@ export default function ClientDetailPage() {
                               )}
                               <div
                                 className="flex items-center gap-1 text-xs mt-auto group-hover:gap-2 transition-all"
-                                style={{ color: '#C8432A' }}
+                                style={{ color: '#3B82F6' }}
                               >
                                 <LayoutDashboard className="h-3.5 w-3.5" />
                                 <span>Ver dashboard</span>
@@ -431,11 +431,11 @@ export default function ClientDetailPage() {
                             <input
                               type="text"
                               placeholder="Nome da estratégia *"
-                              className="flex-1 rounded-lg border border-[#E8E2D8] bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C8432A]/30 focus:border-[#C8432A]"
+                              className="flex-1 rounded-lg border border-[#E8E2D8] bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/30 focus:border-[#3B82F6]"
                               {...strategyForm.register('name')}
                             />
                             <select
-                              className="rounded-lg border border-[#E8E2D8] bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C8432A]/30"
+                              className="rounded-lg border border-[#E8E2D8] bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/30"
                               {...strategyForm.register('funnelType')}
                             >
                               {Object.entries(FUNNEL_LABELS).map(([value, label]) => (
@@ -444,7 +444,7 @@ export default function ClientDetailPage() {
                             </select>
                           </div>
                           <select
-                            className="w-full rounded-lg border border-[#E8E2D8] bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C8432A]/30"
+                            className="w-full rounded-lg border border-[#E8E2D8] bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/30"
                             {...strategyForm.register('objective')}
                           >
                             <option value="">Objetivo (opcional)</option>
@@ -457,7 +457,7 @@ export default function ClientDetailPage() {
                               type="submit"
                               disabled={strategyMutation.isPending}
                               className="rounded-lg px-4 py-1.5 text-xs font-medium text-white disabled:opacity-50"
-                              style={{ backgroundColor: '#C8432A' }}
+                              style={{ backgroundColor: '#3B82F6' }}
                             >
                               {strategyMutation.isPending ? 'Criando...' : 'Criar'}
                             </button>

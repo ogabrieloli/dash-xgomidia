@@ -47,7 +47,7 @@ export function KpiCard({ label, value, sub, change, goal, currentRaw, goalLabel
     <div
       className={cn(
         'bg-white rounded-xl border border-[#E8E2D8] shadow-sm px-5 py-4 space-y-1',
-        accent && 'border-l-2 border-l-[#C8432A]',
+        accent && 'border-l-2 border-l-[#3B82F6]',
       )}
     >
       <p className="text-[11px] font-medium text-stone-400 uppercase tracking-widest">{label}</p>
@@ -78,7 +78,7 @@ export function KpiCard({ label, value, sub, change, goal, currentRaw, goalLabel
         <div className="pt-1.5 space-y-1">
           <div className="h-1.5 w-full rounded-full bg-stone-100 overflow-hidden">
             <div
-              className={cn('h-full rounded-full transition-all', goalMet ? 'bg-[#C8432A]' : 'bg-amber-400')}
+              className={cn('h-full rounded-full transition-all', goalMet ? 'bg-[#3B82F6]' : 'bg-amber-400')}
               style={{ width: `${progressPct}%` }}
             />
           </div>

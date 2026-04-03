@@ -45,7 +45,7 @@ export default function AgencyLayout({ children }: { children: React.ReactNode }
         <div className="px-6 py-6 border-b border-stone-800">
           <div className="flex items-baseline gap-1">
             <span className="font-display text-xl font-bold text-white tracking-tight">XGO</span>
-            <span style={{ color: '#C8432A' }} className="text-xl font-bold">·</span>
+            <span style={{ color: '#3B82F6' }} className="text-xl font-bold">·</span>
           </div>
           <p className="text-xs text-stone-500 mt-0.5 tracking-wide">Midia Platform</p>
         </div>
@@ -64,7 +64,7 @@ export default function AgencyLayout({ children }: { children: React.ReactNode }
                     ? 'text-white'
                     : 'text-stone-400 hover:text-white hover:bg-stone-800',
                 )}
-                style={isActive ? { backgroundColor: '#C8432A' } : undefined}
+                style={isActive ? { backgroundColor: '#3B82F6' } : undefined}
               >
                 <Icon className="h-[18px] w-[18px] flex-shrink-0" />
                 {label}
@@ -78,7 +78,7 @@ export default function AgencyLayout({ children }: { children: React.ReactNode }
           <div className="flex items-center gap-3 px-3 py-2 rounded-lg">
             <div
               className="h-8 w-8 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-              style={{ backgroundColor: '#C8432A' }}
+              style={{ backgroundColor: '#3B82F6' }}
             >
               {initials}
             </div>
