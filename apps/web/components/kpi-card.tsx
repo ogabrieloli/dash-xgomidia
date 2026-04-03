@@ -10,16 +10,17 @@ interface KpiCardProps {
   currentRaw?: number    // valor atual numérico correspondente ao goal
   goalLabel?: string     // ex: "Meta: 3.0x" exibido abaixo da barra
   goalLowerIsBetter?: boolean  // true para CPL/CPA: estar abaixo da meta é bom
+  accent?: boolean       // exibe borda esquerda terracota
   loading?: boolean
 }
 
-export function KpiCard({ label, value, sub, change, goal, currentRaw, goalLabel, goalLowerIsBetter, loading }: KpiCardProps) {
+export function KpiCard({ label, value, sub, change, goal, currentRaw, goalLabel, goalLowerIsBetter, accent, loading }: KpiCardProps) {
   if (loading) {
     return (
-      <div className="rounded-lg border bg-card p-4 space-y-2 animate-pulse">
-        <div className="h-3 w-24 rounded bg-muted" />
-        <div className="h-7 w-32 rounded bg-muted" />
-        <div className="h-3 w-16 rounded bg-muted" />
+      <div className="bg-white rounded-xl border border-[#E8E2D8] shadow-sm px-5 py-4 space-y-2 animate-pulse">
+        <div className="h-2.5 w-20 rounded bg-stone-100" />
+        <div className="h-8 w-28 rounded bg-stone-100" />
+        <div className="h-2.5 w-16 rounded bg-stone-100" />
       </div>
     )
   }
@@ -34,7 +35,6 @@ export function KpiCard({ label, value, sub, change, goal, currentRaw, goalLabel
   let goalMet = false
   if (showGoal) {
     if (goalLowerIsBetter) {
-      // Meta é "ser menor que goal". currentRaw <= goal → dentro da meta.
       progressPct = Math.min(100, (goal / currentRaw!) * 100)
       goalMet = currentRaw! <= goal
     } else {
@@ -44,20 +44,26 @@ export function KpiCard({ label, value, sub, change, goal, currentRaw, goalLabel
   }
 
   return (
-    <div className="rounded-lg border bg-card p-4 space-y-1">
-      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
-      <p className="text-2xl font-bold text-foreground">{value}</p>
+    <div
+      className={cn(
+        'bg-white rounded-xl border border-[#E8E2D8] shadow-sm px-5 py-4 space-y-1',
+        accent && 'border-l-2 border-l-[#C8432A]',
+      )}
+    >
+      <p className="text-[11px] font-medium text-stone-400 uppercase tracking-widest">{label}</p>
 
-      <div className="flex items-center gap-2">
-        {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
+      <p className="font-display text-3xl font-bold text-stone-900 leading-tight">{value}</p>
+
+      <div className="flex items-center gap-2 flex-wrap">
+        {sub && <p className="text-xs text-stone-400">{sub}</p>}
 
         {change !== undefined && (
           <span
             className={cn(
-              'flex items-center gap-0.5 text-xs font-medium',
-              isPositive && 'text-green-600',
-              isNegative && 'text-destructive',
-              isNeutral && 'text-muted-foreground',
+              'inline-flex items-center gap-0.5 text-[11px] font-semibold rounded-full px-2 py-0.5',
+              isPositive && 'bg-green-50 text-green-700',
+              isNegative && 'bg-red-50 text-red-700',
+              isNeutral && 'bg-stone-100 text-stone-500',
             )}
           >
             {isPositive && <TrendingUp className="h-3 w-3" />}
@@ -69,14 +75,14 @@ export function KpiCard({ label, value, sub, change, goal, currentRaw, goalLabel
       </div>
 
       {showGoal && (
-        <div className="pt-1 space-y-1">
-          <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+        <div className="pt-1.5 space-y-1">
+          <div className="h-1.5 w-full rounded-full bg-stone-100 overflow-hidden">
             <div
-              className={cn('h-full rounded-full transition-all', goalMet ? 'bg-green-500' : 'bg-amber-500')}
+              className={cn('h-full rounded-full transition-all', goalMet ? 'bg-[#C8432A]' : 'bg-amber-400')}
               style={{ width: `${progressPct}%` }}
             />
           </div>
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-[10px] text-stone-400">
             {progressPct.toFixed(0)}% da meta
             {goalLabel && ` · ${goalLabel}`}
             {goalMet ? ' ✓' : ''}

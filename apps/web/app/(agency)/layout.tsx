@@ -32,51 +32,64 @@ export default function AgencyLayout({ children }: { children: React.ReactNode }
     )
   }
 
-  if (!user) return null // useAuth redireciona
+  if (!user) return null
+
+  const initials = user.email[0]?.toUpperCase() ?? '?'
 
   return (
     <div className="flex h-screen bg-background">
-      {/* Sidebar */}
-      <aside className="w-60 flex-shrink-0 border-r bg-card flex flex-col">
+      {/* Sidebar — dark stone-950 */}
+      <aside className="w-64 flex-shrink-0 flex flex-col" style={{ backgroundColor: '#0C0A09' }}>
+
         {/* Logo */}
-        <div className="px-6 py-5 border-b">
-          <span className="text-lg font-bold text-foreground">XGO Midia</span>
-          <p className="text-xs text-muted-foreground mt-0.5">Plataforma de Tráfego</p>
+        <div className="px-6 py-6 border-b border-stone-800">
+          <div className="flex items-baseline gap-1">
+            <span className="font-display text-xl font-bold text-white tracking-tight">XGO</span>
+            <span style={{ color: '#C8432A' }} className="text-xl font-bold">·</span>
+          </div>
+          <p className="text-xs text-stone-500 mt-0.5 tracking-wide">Midia Platform</p>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-1">
-          {navItems.map(({ href, label, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
-                pathname === href || pathname.startsWith(href + '/')
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-              )}
-            >
-              <Icon className="h-4 w-4 flex-shrink-0" />
-              {label}
-            </Link>
-          ))}
+        <nav className="flex-1 px-3 py-5 space-y-0.5">
+          {navItems.map(({ href, label, icon: Icon }) => {
+            const isActive = pathname === href || pathname.startsWith(href + '/')
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                  isActive
+                    ? 'text-white'
+                    : 'text-stone-400 hover:text-white hover:bg-stone-800',
+                )}
+                style={isActive ? { backgroundColor: '#C8432A' } : undefined}
+              >
+                <Icon className="h-[18px] w-[18px] flex-shrink-0" />
+                {label}
+              </Link>
+            )
+          })}
         </nav>
 
-        {/* User info + logout */}
-        <div className="px-3 py-4 border-t">
-          <div className="flex items-center gap-3 px-3 py-2 rounded-md">
-            <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium text-primary">
-              {user.email[0]?.toUpperCase()}
+        {/* User section */}
+        <div className="px-3 py-4 border-t border-stone-800">
+          <div className="flex items-center gap-3 px-3 py-2 rounded-lg">
+            <div
+              className="h-8 w-8 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+              style={{ backgroundColor: '#C8432A' }}
+            >
+              {initials}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-foreground truncate">{user.email}</p>
-              <p className="text-xs text-muted-foreground">{user.role.replace('_', ' ')}</p>
+              <p className="text-xs font-medium text-stone-200 truncate">{user.email}</p>
+              <p className="text-[11px] text-stone-500">{user.role.replace('_', ' ')}</p>
             </div>
           </div>
           <button
             onClick={logout}
-            className="mt-1 flex w-full items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+            className="mt-1 flex w-full items-center gap-3 px-3 py-2 rounded-lg text-sm text-stone-500 hover:text-stone-300 hover:bg-stone-800 transition-colors"
           >
             <LogOut className="h-4 w-4" />
             Sair

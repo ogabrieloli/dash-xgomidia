@@ -4,16 +4,13 @@ import { useState } from 'react'
 import { format, subDays } from 'date-fns'
 import { useQuery } from '@tanstack/react-query'
 import {
-  AreaChart,
-  Area,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  BarChart,
-  Bar,
-  Legend,
 } from 'recharts'
 import Link from 'next/link'
 import { api } from '@/lib/api'
@@ -73,7 +70,6 @@ export default function DashboardPage() {
   const spend = parseFloat(totals?.spend ?? '0')
   const revenue = parseFloat(totals?.revenue ?? '0')
 
-  // Prepare chart data from topClients
   const clientChartData = (data?.topClients ?? []).slice(0, 8).map((c) => ({
     name: c.clientName.length > 14 ? c.clientName.slice(0, 14) + '…' : c.clientName,
     spend: parseFloat(c.spend),
@@ -81,53 +77,35 @@ export default function DashboardPage() {
   }))
 
   return (
-    <div className="p-8 space-y-8">
+    <div className="p-8 space-y-7">
+
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-          <p className="text-sm text-muted-foreground mt-1">Visão consolidada da agência</p>
+          <h1 className="font-display text-2xl font-bold text-stone-900">Dashboard</h1>
+          <p className="text-sm text-stone-400 mt-0.5">Visão consolidada da agência</p>
         </div>
         <DateRangePicker value={dateRange} onChange={setDateRange} />
       </div>
 
-      {/* KPI Cards — Agency Level */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-        <KpiCard
-          label="Clientes Ativos"
-          value={data ? String(data.totalClients) : '—'}
-          loading={isLoading}
-        />
-        <KpiCard
-          label="Média de Investimento"
-          value={data ? formatCurrency(data.averageInvestment) : '—'}
-          sub="Por cliente no período"
-          loading={isLoading}
-        />
-        <KpiCard
-          label="ROAS Médio"
-          value={totals ? `${totals.derived.roas.toFixed(2)}x` : '—'}
-          sub="Retorno sobre investimento"
-          loading={isLoading}
-        />
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      {/* Hero KPIs — 5 em row */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <KpiCard
           label="Investimento Total"
           value={formatCurrency(spend)}
           loading={isLoading}
+          accent
         />
         <KpiCard
           label="Receita Total"
           value={formatCurrency(revenue)}
           loading={isLoading}
+          accent
         />
         <KpiCard
           label="ROAS Médio"
           value={totals ? `${totals.derived.roas.toFixed(2)}x` : '—'}
-          sub="Retorno sobre investimento"
+          sub="Retorno sobre invest."
           loading={isLoading}
         />
         <KpiCard
@@ -136,10 +114,115 @@ export default function DashboardPage() {
           sub={totals ? `CPA: ${formatCurrency(totals.derived.cpa)}` : undefined}
           loading={isLoading}
         />
+        <KpiCard
+          label="Clientes Ativos"
+          value={data ? String(data.totalClients) : '—'}
+          sub={data ? `Média ${formatCurrency(data.averageInvestment)}/cliente` : undefined}
+          loading={isLoading}
+        />
+      </div>
+
+      {/* Chart + Top Clients side by side */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+
+        {/* Bar chart — col-span-3 */}
+        <div className="lg:col-span-3 bg-white rounded-xl border border-[#E8E2D8] shadow-sm p-6">
+          <h2 className="text-sm font-semibold text-stone-700 mb-5">Investimento por Cliente</h2>
+          {isLoading ? (
+            <div className="h-64 rounded-lg bg-stone-50 animate-pulse" />
+          ) : clientChartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={clientChartData} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F0EBE0" />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#78716C' }} axisLine={false} tickLine={false} />
+                <YAxis
+                  tick={{ fontSize: 11, fill: '#78716C' }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(v: number) =>
+                    v >= 1000 ? `R$${(v / 1000).toFixed(0)}k` : `R$${v}`
+                  }
+                />
+                <Tooltip
+                  formatter={(value: number, name: string) => [
+                    formatCurrency(value),
+                    name === 'spend' ? 'Investimento' : 'Receita',
+                  ]}
+                  contentStyle={{
+                    fontSize: 12,
+                    border: '1px solid #E8E2D8',
+                    borderRadius: 8,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+                  }}
+                />
+                <Bar dataKey="spend" fill="#C8432A" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="revenue" fill="#C8432A40" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-64 flex items-center justify-center text-sm text-stone-400">
+              Sem dados para o período
+            </div>
+          )}
+        </div>
+
+        {/* Top clients table — col-span-2 */}
+        <div className="lg:col-span-2 bg-white rounded-xl border border-[#E8E2D8] shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-[#F0EBE0]">
+            <h2 className="text-sm font-semibold text-stone-700">Top Performance</h2>
+          </div>
+          {isLoading ? (
+            <div className="p-5 space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex justify-between items-center">
+                  <div className="h-3 w-28 rounded bg-stone-100 animate-pulse" />
+                  <div className="h-3 w-12 rounded bg-stone-100 animate-pulse" />
+                </div>
+              ))}
+            </div>
+          ) : (data?.topClients ?? []).length > 0 ? (
+            <div className="divide-y divide-[#F5F0E8]">
+              {data!.topClients.slice(0, 8).map((client, idx) => (
+                <div key={client.clientId} className="flex items-center justify-between px-5 py-3 hover:bg-stone-50 transition-colors">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-xs font-medium text-stone-300 w-4 tabular-nums">{idx + 1}</span>
+                    <Link
+                      href={`/clients/${client.clientId}`}
+                      className="text-sm font-medium text-stone-800 hover:text-[#C8432A] transition-colors truncate"
+                    >
+                      {client.clientName}
+                    </Link>
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <span className="text-xs text-stone-400 tabular-nums hidden sm:block">
+                      {formatCurrency(parseFloat(client.spend))}
+                    </span>
+                    <span
+                      className={
+                        'text-sm font-semibold tabular-nums ' +
+                        (client.roas >= 3
+                          ? 'text-green-600'
+                          : client.roas >= 1
+                          ? 'text-amber-600'
+                          : 'text-red-600')
+                      }
+                    >
+                      {client.roas.toFixed(1)}x
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-8 text-center text-sm text-stone-400">
+              Nenhum dado disponível
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Secondary KPIs */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <KpiCard
           label="Impressões"
           value={totals ? formatNumber(totals.impressions) : '—'}
@@ -157,98 +240,20 @@ export default function DashboardPage() {
           value={totals ? formatCurrency(totals.derived.cpc) : '—'}
           loading={isLoading}
         />
+        <KpiCard
+          label="CPA Médio"
+          value={totals ? formatCurrency(totals.derived.cpa) : '—'}
+          loading={isLoading}
+        />
       </div>
 
-      {/* Top Clients Chart */}
-      {!isLoading && clientChartData.length > 0 && (
-        <div className="rounded-lg border bg-card p-6">
-          <h2 className="text-sm font-semibold text-foreground mb-4">Investimento por Cliente</h2>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={clientChartData} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis
-                tick={{ fontSize: 11 }}
-                tickFormatter={(v: number) =>
-                  v >= 1000 ? `R$${(v / 1000).toFixed(0)}k` : `R$${v}`
-                }
-              />
-              <Tooltip
-                formatter={(value: number, name: string) => [
-                  formatCurrency(value),
-                  name === 'spend' ? 'Investimento' : 'Receita',
-                ]}
-                contentStyle={{ fontSize: 12 }}
-              />
-              <Legend
-                formatter={(value) => (value === 'spend' ? 'Investimento' : 'Receita')}
-                wrapperStyle={{ fontSize: 12 }}
-              />
-              <Bar dataKey="spend" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="revenue" fill="hsl(var(--primary) / 0.3)" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {/* Top Clients Table */}
-      {!isLoading && (data?.topClients ?? []).length > 0 && (
-        <div className="rounded-lg border bg-card overflow-hidden">
-          <div className="px-6 py-4 border-b">
-            <h2 className="text-sm font-semibold text-foreground">Top Clientes</h2>
-          </div>
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40">
-              <tr>
-                <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground">Cliente</th>
-                <th className="text-right px-6 py-3 text-xs font-medium text-muted-foreground">Investimento</th>
-                <th className="text-right px-6 py-3 text-xs font-medium text-muted-foreground">Receita</th>
-                <th className="text-right px-6 py-3 text-xs font-medium text-muted-foreground">ROAS</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {data!.topClients.map((client) => (
-                <tr key={client.clientId} className="hover:bg-accent/30 transition-colors">
-                  <td className="px-6 py-3 font-medium">
-                    <Link
-                      href={`/clients/${client.clientId}`}
-                      className="hover:text-primary hover:underline"
-                    >
-                      {client.clientName}
-                    </Link>
-                  </td>
-                  <td className="px-6 py-3 text-right tabular-nums">
-                    {formatCurrency(parseFloat(client.spend))}
-                  </td>
-                  <td className="px-6 py-3 text-right tabular-nums">
-                    {formatCurrency(parseFloat(client.revenue))}
-                  </td>
-                  <td className="px-6 py-3 text-right tabular-nums font-medium">
-                    <span
-                      className={
-                        client.roas >= 3
-                          ? 'text-green-600'
-                          : client.roas >= 1
-                          ? 'text-amber-600'
-                          : 'text-destructive'
-                      }
-                    >
-                      {client.roas.toFixed(2)}x
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
+      {/* Empty state */}
       {!isLoading && (data?.topClients ?? []).length === 0 && (
-        <div className="rounded-lg border border-dashed bg-card p-12 text-center">
-          <p className="text-sm text-muted-foreground">
+        <div className="rounded-xl border border-dashed border-[#E8E2D8] bg-white p-12 text-center">
+          <p className="text-sm text-stone-400">
             Nenhuma métrica disponível para o período selecionado.
           </p>
-          <p className="text-xs text-muted-foreground/70 mt-1">
+          <p className="text-xs text-stone-300 mt-1">
             Conecte contas de anúncio e aguarde o sync.
           </p>
         </div>
