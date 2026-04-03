@@ -97,15 +97,10 @@ export async function metaOAuthRoutes(app: FastifyInstance) {
     }
 
     const state = encodeState(query.clientId, request.user.sub)
-    const params = new URLSearchParams({
-      client_id: appId,
-      redirect_uri: redirectUri,
-      scope: ['public_profile', 'ads_read', 'ads_management', 'business_management', 'pages_show_list'].join(','),
-      response_type: 'code',
-      state,
-    })
+    const scope = 'ads_read,ads_management,business_management'
+    const url = `${META_OAUTH_URL}?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&response_type=code&state=${encodeURIComponent(state)}`
 
-    return reply.send({ url: `${META_OAUTH_URL}?${params.toString()}` })
+    return reply.send({ url })
   })
 
   // ─────────────────────────────────────────────
@@ -141,13 +136,8 @@ export async function metaOAuthRoutes(app: FastifyInstance) {
     // 1. Trocar code por token de curta duração
     let tokenData: MetaTokenResponse
     try {
-      const tokenParams = new URLSearchParams({
-        client_id: appId,
-        client_secret: appSecret,
-        redirect_uri: redirectUri,
-        code: query.code!,
-      })
-      const tokenRes = await fetch(`${META_GRAPH_URL}/oauth/access_token?${tokenParams.toString()}`)
+      const tokenUrl = `${META_GRAPH_URL}/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&redirect_uri=${encodeURIComponent(redirectUri)}&code=${encodeURIComponent(query.code!)}`
+      const tokenRes = await fetch(tokenUrl)
       tokenData = await tokenRes.json() as MetaTokenResponse
       if (!tokenData.access_token) throw new Error('Token não retornado')
     } catch (err) {
