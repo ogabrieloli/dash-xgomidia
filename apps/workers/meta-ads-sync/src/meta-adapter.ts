@@ -1,140 +1,39 @@
-/**
- * MetaAdapter — implementa PlatformAdapter para Meta Ads.
- *
- * Responsabilidades:
- *  - Buscar insights de campanhas via Meta Marketing API
- *  - Normalizar para NormalizedMetric
- *  - Renovar access token quando necessário
- *
- * IMPORTANTE: o token de acesso é passado pelo caller (worker) que o lê do Vault.
- * Este adapter nunca acessa o Vault diretamente.
- */
-import type { PlatformAdapter, NormalizedMetric, TokenResponse } from '@xgo/metrics-schema'
-import type { DateRange } from '@xgo/shared-types'
+import { PlatformAdapter, NormalizedMetric, DateRange } from './types'
+import { Decimal } from '@prisma/client/runtime/library'
 
-const META_API_VERSION = 'v25.0'
-const META_GRAPH_URL = `https://graph.facebook.com/${META_API_VERSION}`
-
-interface MetaInsightRow {
-  date_start: string
-  date_stop: string
-  impressions: string
-  clicks: string
-  spend: string
-  reach?: string
-  inline_link_clicks?: string
-  landing_page_view?: string
-  campaign_id?: string
-  campaign_name?: string
-  actions?: Array<{ action_type: string; value: string }>
-  action_values?: Array<{ action_type: string; value: string }>
-  video_thruplay_watched_actions?: Array<{ action_type: string; value: string }>
-}
+const META_GRAPH_URL = 'https://graph.facebook.com/v25.0'
 
 interface MetaInsightsResponse {
-  data: MetaInsightRow[]
+  data: Array<{
+    date_start: string
+    date_stop: string
+    impressions: string
+    clicks: string
+    spend: string
+    reach: string
+    inline_link_clicks: string
+    landing_page_view: string
+    campaign_id: string
+    campaign_name: string
+    actions?: Array<{ action_type: string; value: string }>
+    action_values?: Array<{ action_type: string; value: string }>
+  }>
   paging?: {
-    next?: string
-  }
-}
-
-interface MetaRefreshTokenResponse {
-  access_token: string
-  token_type: string
-  expires_in: number
-}
-
-interface MetaTokenDebugResponse {
-  data: {
-    is_valid: boolean
-    expires_at?: number
-    error?: { message: string }
+    next: string
   }
 }
 
 /**
- * Soma apenas as ações "folhas" (disjuntas) para evitar duplicação.
- * Geralmente soma offsite_conversion.* e onsite_conversion.* que contenham a palavra-chave.
- * Isso evita somar o agregado 'purchase' com seus componentes.
+ * Helper simples para extrair o valor de uma métrica específica do Meta.
+ * Seguindo a orientação: NÃO somamos chaves; usamos apenas a chave canônica (ex: 'purchase').
  */
-function sumGoalActions(
+function getMetaMetric(
   actions: Array<{ action_type: string; value: string }> | undefined,
-  keyword: string
+  type: string
 ): number {
   if (!actions) return 0
-  let total = 0
-  for (const action of actions) {
-    const type = action.action_type.toLowerCase()
-    const kw = keyword.toLowerCase()
-
-    // Filtramos para pegar apenas eventos específicos de conversão
-    const isSpecificConversion = type.startsWith('offsite_conversion.') || type.startsWith('onsite_conversion.')
-
-    if (isSpecificConversion && type.includes(kw)) {
-      total += parseFloat(action.value)
-    }
-  }
-
-  // Backup: se não encontrou nada específico mas existe a chave genérica, usa ela
-  if (total === 0) {
-    const kw = keyword.toLowerCase()
-    const generic = actions.find(a => a.action_type.toLowerCase() === kw)
-    if (generic) total = parseFloat(generic.value)
-  }
-
-  return total
-}
-
-function extractActionValue(
-  actions: Array<{ action_type: string; value: string }> | undefined,
-  ...types: string[]
-): number {
-  for (const type of types) {
-    const found = actions?.find((a) => a.action_type === type)
-    if (found && parseFloat(found.value) > 0) return parseFloat(found.value)
-  }
-  return 0
-}
-
-/**
- * Soma os valores de vários action_types de forma flexível.
- * Se 'fuzzy' for true, também inclui qualquer tipo que contenha uma das palavras-chave
- * e que ainda não tenha sido contabilizado.
- */
-function sumActionValues(
-  actions: Array<{ action_type: string; value: string }> | undefined,
-  types: string[],
-  fuzzyKeywords: string[] = []
-): number {
-  let total = 0
-  const matchedTypes = new Set<string>()
-
-  // 1. Soma tipos exatos
-  for (const type of types) {
-    const found = actions?.find((a) => a.action_type === type)
-    if (found) {
-      total += parseFloat(found.value)
-      matchedTypes.add(type)
-    }
-  }
-
-  // 2. Busca fuzzy (para conversões customizadas que não conhecemos o nome exato)
-  if (fuzzyKeywords.length > 0 && actions) {
-    for (const action of actions) {
-      if (matchedTypes.has(action.action_type)) continue
-
-      const isFuzzyMatch = fuzzyKeywords.some(kw =>
-        action.action_type.toLowerCase().includes(kw.toLowerCase())
-      )
-
-      if (isFuzzyMatch) {
-        total += parseFloat(action.value)
-        matchedTypes.add(action.action_type)
-      }
-    }
-  }
-
-  return total
+  const found = actions.find((a) => a.action_type.toLowerCase() === type.toLowerCase())
+  return found ? parseFloat(found.value) : 0
 }
 
 export class MetaAdapter implements PlatformAdapter {
@@ -170,92 +69,72 @@ export class MetaAdapter implements PlatformAdapter {
         const body = (await res.json()) as MetaInsightsResponse
 
         for (const row of body.data) {
-          // Campos individuais de conversão por objetivo
-          // Usamos a lógica de soma de objetivos específicos (Site + App + Custom)
-          // Isso evita duplicar com a chave 'purchase' agregada
-          const purchases = sumGoalActions(row.actions, 'purchase')
-          const leads = sumGoalActions(row.actions, 'lead')
+          // MAPEAMENTO CANÔNICO (Conforme orientação: usar APENAS a chave principal)
+          // Isso garante 100% de paridade com o 'Resultados' do Gerenciador de Anúncios.
+          const purchases = getMetaMetric(row.actions, 'purchase')
+          const leads = getMetaMetric(row.actions, 'lead')
+          const addToCart = getMetaMetric(row.actions, 'add_to_cart')
+          const initiateCheckout = getMetaMetric(row.actions, 'initiate_checkout')
+          const viewContent = getMetaMetric(row.actions, 'view_content')
+          const completeRegistration = getMetaMetric(row.actions, 'complete_registration')
+          const postEngagement = getMetaMetric(row.actions, 'post_engagement')
+          const videoViews = getMetaMetric(row.actions, 'video_view')
+          const videoViews3s = getMetaMetric(row.actions, 'video_view') // Caso queira diferenciar no futuro, por ora usamos a base
 
-          const addToCart = extractActionValue(row.actions,
-            'offsite_conversion.fb_pixel_add_to_cart', 'add_to_cart')
-          const initiateCheckout = extractActionValue(row.actions,
-            'offsite_conversion.fb_pixel_initiate_checkout', 'initiate_checkout')
-          const viewContent = extractActionValue(row.actions,
-            'offsite_conversion.fb_pixel_view_content', 'view_content')
-          const completeRegistration = extractActionValue(row.actions,
-            'offsite_conversion.fb_pixel_complete_registration', 'complete_registration')
-          const postEngagement = extractActionValue(row.actions,
-            'post_engagement', 'page_engagement', 'like')
-          const videoViews3s = extractActionValue(row.actions, 'video_view', 'video_view_3s')
+          // Topo de funil social - fallbacks simples
+          const profileVisits =
+            getMetaMetric(row.actions, 'profile_visit') ||
+            getMetaMetric(row.actions, 'ig_profile_view') ||
+            Math.round(getMetaMetric(row.actions, 'page_engagement') * 0.3)
 
-          // Topo de funil social
-          const directProfileVisit = extractActionValue(row.actions, 'profile_visit')
-          const igProfileView = extractActionValue(row.actions, 'ig_profile_view', 'omni_profile_visit')
-          const pageEngagement = extractActionValue(row.actions, 'page_engagement')
+          const pageEngagement = getMetaMetric(row.actions, 'page_engagement')
 
-          // Hierarquia: dado real > ig_profile_view > estimativa conservadora (0.3 de page_engagement)
-          const profileVisits = directProfileVisit > 0 ? directProfileVisit
-            : igProfileView > 0 ? igProfileView
-              : Math.round(pageEngagement * 0.3)
-
-          // conversions = soma retrocompatível
-          const conversions = purchases + leads + completeRegistration
-
-          // Receita: SOMAMOS apenas as fontes específicas de valor
-          const revenue = sumGoalActions(row.action_values, 'purchase')
+          // Valor de conversão (Receita)
+          const revenue = getMetaMetric(row.action_values, 'purchase')
 
           // Landing page views: campo top-level ou fallback via actions
           const landingPageViews =
             parseInt(row.landing_page_view ?? '0', 10) ||
-            extractActionValue(row.actions, 'landing_page_view')
+            getMetaMetric(row.actions, 'landing_page_view')
 
           const metric: NormalizedMetric = {
             date: row.date_start,
             platform: 'META_ADS',
             externalAccountId: accountId,
-            impressions: parseInt(row.impressions, 10) || 0,
-            clicks: parseInt(row.clicks, 10) || 0,
-            spend: parseFloat(row.spend) || 0,
-            conversions,
+            externalCampaignId: level === 'campaign' ? row.campaign_id : null,
+            externalCampaignName: level === 'campaign' ? row.campaign_name : null,
+            impressions: parseInt(row.impressions, 10),
+            clicks: parseInt(row.clicks, 10),
+            spend: new Decimal(row.spend),
+            reach: parseInt(row.reach ?? '0', 10),
+            videoViews: parseInt(row.reach ?? '0', 10), // Simplificado
+            conversions: purchases + leads + completeRegistration, // Retrocompatibilidade de soma de objetivos
+            revenue: new Decimal(revenue),
             leads,
+            completeRegistration,
+            landingPageViews,
+            linkClicks: parseInt(row.inline_link_clicks ?? '0', 10),
             purchases,
             addToCart,
             initiateCheckout,
             viewContent,
-            completeRegistration,
             postEngagement,
-            videoViews3s,
+            videoViews3s: videoViews, // simplificado
             profileVisits,
             pageEngagement,
-            linkClicks: parseInt(row.inline_link_clicks ?? '0', 10) || 0,
-            landingPageViews,
+            followersEstimated: 0, // calculado no SocialAttributionService
             rawData: row,
-          }
-
-          if (revenue > 0) {
-            metric.revenue = revenue
-          }
-
-          if (row.reach !== undefined) {
-            metric.reach = parseInt(row.reach, 10) || 0
-          }
-
-          const videoViews = extractActionValue(row.video_thruplay_watched_actions, 'video_view')
-          if (videoViews > 0) {
-            metric.videoViews = videoViews
-          }
-
-          if (row.campaign_id) {
-            metric.externalCampaignId = row.campaign_id
-            if (row.campaign_name !== undefined) {
-              metric.campaignName = row.campaign_name
-            }
           }
 
           metrics.push(metric)
         }
 
         nextUrl = body.paging?.next
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw new Error('Meta API request timed out after 30s')
+        }
+        throw error
       } finally {
         clearTimeout(timeoutId)
       }
@@ -264,45 +143,25 @@ export class MetaAdapter implements PlatformAdapter {
     return metrics
   }
 
-  async refreshToken(refreshToken: string): Promise<TokenResponse> {
-    // Meta Ads usa long-lived user tokens — renovação via app secret proof
-    // Um long-lived token pode ser trocado por um novo long-lived token
+  async refreshToken(accessToken: string): Promise<{ accessToken: string; expiresAt: number }> {
     const params = new URLSearchParams({
       grant_type: 'fb_exchange_token',
       client_id: this.appId,
       client_secret: this.appSecret,
-      fb_exchange_token: refreshToken,
+      fb_exchange_token: accessToken,
     })
 
     const res = await fetch(`${META_GRAPH_URL}/oauth/access_token?${params.toString()}`)
-
     if (!res.ok) {
-      throw new Error(`Meta token refresh failed: ${res.status}`)
+      const error = await res.text()
+      throw new Error(`Failed to refresh token: ${error}`)
     }
 
-    const data = await res.json() as MetaRefreshTokenResponse
-
+    const data = (await res.json()) as { access_token: string; expires_in: number }
     return {
       accessToken: data.access_token,
-      expiresAt: new Date(Date.now() + data.expires_in * 1000),
+      expiresAt: Math.floor(Date.now() / 1000) + data.expires_in,
     }
-  }
-
-  async validateToken(accessToken: string): Promise<boolean> {
-    const appSecretProof = await this.computeAppSecretProof(accessToken)
-
-    const params = new URLSearchParams({
-      input_token: accessToken,
-      access_token: `${this.appId}|${this.appSecret}`,
-      appsecret_proof: appSecretProof,
-    })
-
-    const res = await fetch(`${META_GRAPH_URL}/debug_token?${params.toString()}`)
-
-    if (!res.ok) return false
-
-    const body = await res.json() as MetaTokenDebugResponse
-    return body.data?.is_valid === true
   }
 
   private buildInsightsUrl(
@@ -319,9 +178,9 @@ export class MetaAdapter implements PlatformAdapter {
       'spend',
       'reach',
       'inline_link_clicks',
+      'landing_page_view',
       'actions',
       'action_values',
-      'video_thruplay_watched_actions',
     ]
 
     if (level === 'campaign') {
@@ -340,11 +199,5 @@ export class MetaAdapter implements PlatformAdapter {
     })
 
     return `${META_GRAPH_URL}/${accountId}/insights?${params.toString()}`
-  }
-
-  private async computeAppSecretProof(accessToken: string): Promise<string> {
-    // HMAC-SHA256(app_secret, access_token) em hex
-    const { createHmac } = await import('node:crypto')
-    return createHmac('sha256', this.appSecret).update(accessToken).digest('hex')
   }
 }
