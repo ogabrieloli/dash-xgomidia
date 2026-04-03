@@ -113,15 +113,21 @@ export class MetaAdapter implements PlatformAdapter {
 
         for (const row of body.data) {
           // Campos individuais de conversão por objetivo
-          // Meta API retorna eventos de pixel com prefixo offsite_conversion.fb_pixel_*
-          // Tentamos o nome completo primeiro e o simplificado como fallback
-          const leads = sumActionValues(row.actions,
-            'offsite_conversion.fb_pixel_lead', 'onsite_conversion.lead', 'lead')
-          const purchases = sumActionValues(row.actions,
-            'offsite_conversion.fb_pixel_purchase', 'onsite_conversion.purchase', 'purchase')
-          const addToCart = sumActionValues(row.actions,
+          // Usamos uma lógica de "união prioritária" para evitar duplicação
+          // Somamos fontes disjuntas (Site + Onsite) mas evitamos somar o agregado 'purchase' com o 'pixel_purchase'
+          const sitePurchases = extractActionValue(row.actions,
+            'offsite_conversion.fb_pixel_purchase', 'offsite_conversion.purchase', 'purchase')
+          const onsitePurchases = extractActionValue(row.actions, 'onsite_conversion.purchase')
+          const purchases = sitePurchases + onsitePurchases
+
+          const siteLeads = extractActionValue(row.actions,
+            'offsite_conversion.fb_pixel_lead', 'offsite_conversion.lead', 'lead')
+          const onsiteLeads = extractActionValue(row.actions, 'onsite_conversion.lead')
+          const leads = siteLeads + onsiteLeads
+
+          const addToCart = extractActionValue(row.actions,
             'offsite_conversion.fb_pixel_add_to_cart', 'add_to_cart')
-          const initiateCheckout = sumActionValues(row.actions,
+          const initiateCheckout = extractActionValue(row.actions,
             'offsite_conversion.fb_pixel_initiate_checkout', 'initiate_checkout')
           const viewContent = extractActionValue(row.actions,
             'offsite_conversion.fb_pixel_view_content', 'view_content')
@@ -142,12 +148,11 @@ export class MetaAdapter implements PlatformAdapter {
           // conversions = soma retrocompatível
           const conversions = purchases + leads + completeRegistration
 
-          // Receita: SOMAMOS onsite e offsite para ter o total correto
-          const revenue = sumActionValues(row.action_values,
-            'offsite_conversion.fb_pixel_purchase',
-            'onsite_conversion.purchase',
-            'purchase'
-          )
+          // Receita: SOMAMOS onsite e offsite para ter o total correto, mas evitamos duplicar o agregado
+          const siteRevenue = extractActionValue(row.action_values,
+            'offsite_conversion.fb_pixel_purchase', 'offsite_conversion.purchase', 'purchase')
+          const onsiteRevenue = extractActionValue(row.action_values, 'onsite_conversion.purchase')
+          const revenue = siteRevenue + onsiteRevenue
 
           // Landing page views: campo top-level ou fallback via actions
           const landingPageViews =
