@@ -94,19 +94,13 @@ export async function processMetaAdsSyncJob(job: Job<MetaAdsSyncJob>): Promise<v
     const metrics = await metaAdapter.fetchMetrics(adAccount.externalId, accessToken, dateRange, 'campaign')
     log.info({ adAccountId, count: metrics.length }, 'Métricas recebidas')
 
-    // Log de diagnóstico: action_types retornados pela Meta (primeira linha)
+    // Log de diagnóstico: valores extraídos da primeira linha da Meta
     if (metrics.length > 0) {
       const sample = metrics[0]!
       const raw = sample.rawData as { actions?: Array<{ action_type: string; value: string }> } | undefined
-      log.info({
-        adAccountId,
-        sampleDate: sample.date,
-        purchases: sample.purchases,
-        leads: sample.leads,
-        landingPageViews: sample.landingPageViews,
-        addToCart: sample.addToCart,
-        actionTypes: raw?.actions?.map((a) => a.action_type) ?? [],
-      }, 'Meta Ads — diagnóstico de action_types')
+      const actionTypesList = (raw?.actions ?? []).map((a) => `${a.action_type}=${a.value}`).join(' | ')
+      log.info(`[DIAG] purchases=${sample.purchases} leads=${sample.leads} landingPageViews=${sample.landingPageViews} addToCart=${sample.addToCart}`)
+      log.info(`[DIAG] actions: ${actionTypesList || '(nenhum)'}`)
     }
 
     // 6. Persistir MetricSnapshots (upsert por campanha por dia)
