@@ -97,7 +97,7 @@ export async function metaOAuthRoutes(app: FastifyInstance) {
     }
 
     const state = encodeState(query.clientId, request.user.sub)
-    const scope = 'ads_read,ads_management,business_management'
+    const scope = 'ads_read,ads_management,business_management,instagram_basic,instagram_manage_insights,read_insights,pages_show_list,pages_read_engagement'
     const url = `${META_OAUTH_URL}?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&response_type=code&state=${encodeURIComponent(state)}`
 
     return reply.send({ url })
