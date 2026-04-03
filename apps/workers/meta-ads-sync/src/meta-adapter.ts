@@ -54,10 +54,13 @@ interface MetaTokenDebugResponse {
 
 function extractActionValue(
   actions: Array<{ action_type: string; value: string }> | undefined,
-  type: string,
+  ...types: string[]
 ): number {
-  const found = actions?.find((a) => a.action_type === type)
-  return found ? parseFloat(found.value) : 0
+  for (const type of types) {
+    const found = actions?.find((a) => a.action_type === type)
+    if (found) return parseFloat(found.value)
+  }
+  return 0
 }
 
 export class MetaAdapter implements PlatformAdapter {
@@ -94,13 +97,22 @@ export class MetaAdapter implements PlatformAdapter {
 
         for (const row of body.data) {
           // Campos individuais de conversão por objetivo
-          const leads = extractActionValue(row.actions, 'lead')
-          const purchases = extractActionValue(row.actions, 'purchase')
-          const addToCart = extractActionValue(row.actions, 'add_to_cart')
-          const initiateCheckout = extractActionValue(row.actions, 'initiate_checkout')
-          const viewContent = extractActionValue(row.actions, 'view_content')
-          const completeRegistration = extractActionValue(row.actions, 'complete_registration')
-          const postEngagement = extractActionValue(row.actions, 'post_engagement')
+          // Meta API retorna eventos de pixel com prefixo offsite_conversion.fb_pixel_*
+          // Tentamos o nome completo primeiro e o simplificado como fallback
+          const leads = extractActionValue(row.actions,
+            'offsite_conversion.fb_pixel_lead', 'lead')
+          const purchases = extractActionValue(row.actions,
+            'offsite_conversion.fb_pixel_purchase', 'purchase')
+          const addToCart = extractActionValue(row.actions,
+            'offsite_conversion.fb_pixel_add_to_cart', 'add_to_cart')
+          const initiateCheckout = extractActionValue(row.actions,
+            'offsite_conversion.fb_pixel_initiate_checkout', 'initiate_checkout')
+          const viewContent = extractActionValue(row.actions,
+            'offsite_conversion.fb_pixel_view_content', 'view_content')
+          const completeRegistration = extractActionValue(row.actions,
+            'offsite_conversion.fb_pixel_complete_registration', 'complete_registration')
+          const postEngagement = extractActionValue(row.actions,
+            'post_engagement', 'page_engagement')
           const videoViews3s = extractActionValue(row.actions, 'video_view')
 
           // Topo de funil social
@@ -114,7 +126,14 @@ export class MetaAdapter implements PlatformAdapter {
           // conversions = soma retrocompatível
           const conversions = purchases + leads + completeRegistration
 
-          const revenue = extractActionValue(row.action_values, 'purchase')
+          // Receita: pixel purchase tem precedência sobre purchase genérico
+          const revenue = extractActionValue(row.action_values,
+            'offsite_conversion.fb_pixel_purchase', 'purchase')
+
+          // Landing page views: campo top-level ou fallback via actions
+          const landingPageViews =
+            parseInt(row.landing_page_view ?? '0', 10) ||
+            extractActionValue(row.actions, 'landing_page_view')
 
           const metric: NormalizedMetric = {
             date: row.date_start,
@@ -135,7 +154,7 @@ export class MetaAdapter implements PlatformAdapter {
             profileVisits,
             pageEngagement,
             linkClicks: parseInt(row.inline_link_clicks ?? '0', 10) || 0,
-            landingPageViews: parseInt(row.landing_page_view ?? '0', 10) || 0,
+            landingPageViews,
             rawData: row,
           }
 
