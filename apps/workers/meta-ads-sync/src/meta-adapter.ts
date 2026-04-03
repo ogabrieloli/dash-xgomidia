@@ -100,9 +100,9 @@ export class MetaAdapter implements PlatformAdapter {
           // Meta API retorna eventos de pixel com prefixo offsite_conversion.fb_pixel_*
           // Tentamos o nome completo primeiro e o simplificado como fallback
           const leads = extractActionValue(row.actions,
-            'offsite_conversion.fb_pixel_lead', 'lead')
+            'offsite_conversion.fb_pixel_lead', 'lead', 'offsite_conversion.lead')
           const purchases = extractActionValue(row.actions,
-            'offsite_conversion.fb_pixel_purchase', 'purchase')
+            'offsite_conversion.fb_pixel_purchase', 'purchase', 'offsite_conversion.purchase', 'onsite_conversion.purchase')
           const addToCart = extractActionValue(row.actions,
             'offsite_conversion.fb_pixel_add_to_cart', 'add_to_cart')
           const initiateCheckout = extractActionValue(row.actions,
@@ -112,8 +112,8 @@ export class MetaAdapter implements PlatformAdapter {
           const completeRegistration = extractActionValue(row.actions,
             'offsite_conversion.fb_pixel_complete_registration', 'complete_registration')
           const postEngagement = extractActionValue(row.actions,
-            'post_engagement', 'page_engagement')
-          const videoViews3s = extractActionValue(row.actions, 'video_view')
+            'post_engagement', 'page_engagement', 'like')
+          const videoViews3s = extractActionValue(row.actions, 'video_view', 'video_view_3s')
 
           // Topo de funil social
           const directProfileVisit = extractActionValue(row.actions, 'profile_visit')
@@ -128,7 +128,12 @@ export class MetaAdapter implements PlatformAdapter {
 
           // Receita: pixel purchase tem precedência sobre purchase genérico
           const revenue = extractActionValue(row.action_values,
-            'offsite_conversion.fb_pixel_purchase', 'purchase')
+            'offsite_conversion.fb_pixel_purchase',
+            'purchase',
+            'offsite_conversion.purchase',
+            'onsite_conversion.purchase',
+            'conversion'
+          )
 
           // Landing page views: campo top-level ou fallback via actions
           const landingPageViews =
