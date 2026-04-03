@@ -85,7 +85,7 @@ export async function processMetaAdsSyncJob(job: Job<MetaAdsSyncJob>): Promise<v
       // Atualizar token no Vault
       await storeAdAccountToken(vault, clientId, 'META_ADS', adAccount.externalId, {
         accessToken: refreshed.accessToken,
-        expiresAt: refreshed.expiresAt,
+        expiresAt: new Date(refreshed.expiresAt * 1000),
       })
 
       log.info({ adAccountId }, 'Token renovado com sucesso')

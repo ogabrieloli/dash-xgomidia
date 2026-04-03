@@ -2,6 +2,8 @@
 
 import { formatNumber, formatCurrency, formatPercent } from '@/lib/utils'
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 interface FunnelTotals {
   impressions: number
   clicks: number
@@ -36,6 +38,8 @@ interface FunnelStep {
   rate?: number
 }
 
+// ─── Step builders ────────────────────────────────────────────────────────────
+
 function buildSteps(totals: FunnelTotals, objective: string | null | undefined): FunnelStep[] {
   if (objective === 'LEAD') {
     const steps: FunnelStep[] = [
@@ -52,7 +56,7 @@ function buildSteps(totals: FunnelTotals, objective: string | null | undefined):
         label: 'Visitas à LP',
         value: totals.landingPageViews!,
         rateLabel: 'chegaram à LP',
-        rate: totals.clicks > 0 ? (totals.landingPageViews!) / totals.clicks : 0,
+        rate: totals.clicks > 0 ? totals.landingPageViews! / totals.clicks : 0,
       })
     }
     steps.push({
@@ -65,9 +69,7 @@ function buildSteps(totals: FunnelTotals, objective: string | null | undefined):
   }
 
   if (objective === 'SALES') {
-    const steps: FunnelStep[] = [
-      { label: 'Cliques', value: totals.clicks },
-    ]
+    const steps: FunnelStep[] = [{ label: 'Cliques', value: totals.clicks }]
     if ((totals.viewContent ?? 0) > 0) {
       steps.push({
         label: 'Ver produto',
@@ -81,7 +83,9 @@ function buildSteps(totals: FunnelTotals, objective: string | null | undefined):
         label: 'Carrinho',
         value: totals.addToCart!,
         rateLabel: 'adicionaram',
-        rate: totals.viewContent ? totals.addToCart! / totals.viewContent : (totals.clicks > 0 ? totals.addToCart! / totals.clicks : 0),
+        rate: totals.viewContent
+          ? totals.addToCart! / totals.viewContent
+          : totals.clicks > 0 ? totals.addToCart! / totals.clicks : 0,
       })
     }
     if ((totals.initiateCheckout ?? 0) > 0) {
@@ -102,15 +106,12 @@ function buildSteps(totals: FunnelTotals, objective: string | null | undefined):
   }
 
   if (objective === 'BRANDING') {
-    const steps: FunnelStep[] = [
-      { label: 'Impressões', value: totals.impressions },
-    ]
+    const steps: FunnelStep[] = [{ label: 'Impressões', value: totals.impressions }]
     if ((totals.reach ?? 0) > 0) {
-      const frequency = totals.impressions / totals.reach!
       steps.push({
         label: 'Alcance',
         value: totals.reach!,
-        rateLabel: `freq. ${frequency.toFixed(1)}x`,
+        rateLabel: `freq. ${(totals.impressions / totals.reach!).toFixed(1)}x`,
         rate: totals.impressions > 0 ? totals.reach! / totals.impressions : 0,
       })
     }
@@ -145,7 +146,10 @@ function buildSteps(totals: FunnelTotals, objective: string | null | undefined):
   ]
 }
 
-function summaryMetrics(totals: FunnelTotals, objective: string | null | undefined): Array<{ label: string; value: string }> {
+function summaryMetrics(
+  totals: FunnelTotals,
+  objective: string | null | undefined,
+): Array<{ label: string; value: string }> {
   if (objective === 'LEAD') {
     return [
       { label: 'CPL', value: formatCurrency(totals.derived.cpl) },
@@ -162,7 +166,10 @@ function summaryMetrics(totals: FunnelTotals, objective: string | null | undefin
   if (objective === 'BRANDING') {
     return [
       { label: 'CPM', value: formatCurrency(totals.derived.cpm) },
-      { label: 'Frequência', value: totals.reach ? `${(totals.impressions / totals.reach).toFixed(1)}x` : '—' },
+      {
+        label: 'Frequência',
+        value: totals.reach ? `${(totals.impressions / totals.reach).toFixed(1)}x` : '—',
+      },
     ]
   }
   return [
@@ -171,32 +178,26 @@ function summaryMetrics(totals: FunnelTotals, objective: string | null | undefin
   ]
 }
 
-interface MetricFunnelProps {
-  totals: FunnelTotals
-  objective?: string | null
-  customMetrics?: string[]
-}
-
 function buildCustomSteps(totals: FunnelTotals, metrics: string[]): FunnelStep[] {
   const getValue = (key: string): number => {
-    switch (key) {
-      case 'impressions': return totals.impressions
-      case 'clicks': return totals.clicks
-      case 'reach': return totals.reach ?? 0
-      case 'videoViews': return totals.videoViews ?? 0
-      case 'videoViews3s': return totals.videoViews3s ?? 0
-      case 'leads': return totals.leads ?? 0
-      case 'completeRegistration': return totals.completeRegistration ?? 0
-      case 'landingPageViews': return totals.landingPageViews ?? 0
-      case 'linkClicks': return totals.linkClicks ?? 0
-      case 'purchases': return totals.purchases ?? 0
-      case 'addToCart': return totals.addToCart ?? 0
-      case 'initiateCheckout': return totals.initiateCheckout ?? 0
-      case 'viewContent': return totals.viewContent ?? 0
-      case 'postEngagement': return totals.postEngagement ?? 0
-      case 'conversions': return 0
-      default: return 0
+    const map: Record<string, number> = {
+      impressions: totals.impressions,
+      clicks: totals.clicks,
+      reach: totals.reach ?? 0,
+      videoViews: totals.videoViews ?? 0,
+      videoViews3s: totals.videoViews3s ?? 0,
+      leads: totals.leads ?? 0,
+      completeRegistration: totals.completeRegistration ?? 0,
+      landingPageViews: totals.landingPageViews ?? 0,
+      linkClicks: totals.linkClicks ?? 0,
+      purchases: totals.purchases ?? 0,
+      addToCart: totals.addToCart ?? 0,
+      initiateCheckout: totals.initiateCheckout ?? 0,
+      viewContent: totals.viewContent ?? 0,
+      postEngagement: totals.postEngagement ?? 0,
+      conversions: 0,
     }
+    return map[key] ?? 0
   }
   const LABELS: Record<string, string> = {
     impressions: 'Impressões', clicks: 'Cliques', reach: 'Alcance', videoViews: 'ThruPlay',
@@ -205,146 +206,289 @@ function buildCustomSteps(totals: FunnelTotals, metrics: string[]): FunnelStep[]
     purchases: 'Compras', addToCart: 'Carrinho', initiateCheckout: 'Checkout',
     viewContent: 'Ver produto', postEngagement: 'Engajamentos', conversions: 'Conversões',
   }
-
   return metrics.map((key, i) => {
     const value = getValue(key)
     const prevValue = i > 0 ? getValue(metrics[i - 1]) : 0
-    const rate = prevValue > 0 ? value / prevValue : undefined
     return {
       label: LABELS[key] ?? key,
       value,
       rateLabel: i > 0 ? 'taxa' : undefined,
-      rate,
+      rate: prevValue > 0 ? value / prevValue : undefined,
     }
   })
 }
 
-// Terracota opacity progression: darkest at top → lightest at bottom
-const STEP_COLORS = [
-  'rgba(200,67,42,0.90)',
-  'rgba(200,67,42,0.72)',
-  'rgba(200,67,42,0.55)',
-  'rgba(200,67,42,0.40)',
-  'rgba(200,67,42,0.28)',
-  'rgba(200,67,42,0.18)',
+// ─── Cylinder geometry constants ──────────────────────────────────────────────
+
+const CAP_H = 13    // half of each ellipse cap (total cap height = CAP_H*2)
+const BODY_H = 44   // cylinder body height
+const CYL_H = CAP_H * 2 + BODY_H  // 70px total per cylinder
+const GAP_H = 56    // gap between cylinders (particles + rate badge)
+const MIN_W = 20    // minimum width % of funnel container
+
+// ─── Color scale: terracota → dusty salmon ────────────────────────────────────
+
+const PALETTE = [
+  { body: '#C8432A', hi: '#E06B55', lo: '#922F1A' },
+  { body: '#CF5540', hi: '#E07D68', lo: '#9E3D2C' },
+  { body: '#D66858', hi: '#E58E7E', lo: '#A44B3E' },
+  { body: '#DC7B70', hi: '#EA9F96', lo: '#AA5A52' },
+  { body: '#E18E88', hi: '#EEB0AB', lo: '#B06960' },
+  { body: '#E6A09C', hi: '#F2C0BC', lo: '#B67872' },
 ]
 
-const STEP_H = 52
-const MIN_RATIO = 0.16  // minimum funnel width — prevents invisible steps
+// ─── Deterministic particle config (stable across renders) ───────────────────
+
+interface ParticleDef {
+  rx: number   // relative x: -0.5 → 0.5 (fraction of funnel width)
+  dur: number  // animation duration (s)
+  del: number  // animation delay (s)
+  sz: number   // diameter (px)
+  big: boolean // use funnelParticle vs funnelParticleSmall
+}
+
+const PARTICLES: ParticleDef[] = [
+  { rx: -0.32, dur: 1.50, del: 0.00, sz: 5, big: true  },
+  { rx:  0.12, dur: 1.65, del: 0.20, sz: 4, big: false },
+  { rx: -0.08, dur: 1.40, del: 0.42, sz: 5, big: true  },
+  { rx:  0.38, dur: 1.70, del: 0.14, sz: 3, big: false },
+  { rx: -0.44, dur: 1.55, del: 0.60, sz: 4, big: true  },
+  { rx:  0.06, dur: 1.35, del: 0.78, sz: 5, big: true  },
+  { rx:  0.26, dur: 1.60, del: 0.48, sz: 3, big: false },
+  { rx: -0.20, dur: 1.75, del: 0.32, sz: 4, big: false },
+  { rx:  0.46, dur: 1.45, del: 0.90, sz: 3, big: false },
+  { rx: -0.52, dur: 1.50, del: 0.68, sz: 4, big: true  },
+]
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+interface CylinderProps {
+  widthPct: number
+  pal: typeof PALETTE[0]
+  label: string
+}
+
+function Cylinder({ widthPct, pal, label }: CylinderProps) {
+  const bodyGrad = `linear-gradient(to right,
+    ${pal.lo} 0%,
+    ${pal.body} 18%,
+    ${pal.hi}  42%,
+    ${pal.body} 63%,
+    ${pal.lo} 100%
+  )`
+
+  return (
+    <div style={{ width: `${widthPct}%`, margin: '0 auto' }}>
+      {/* Top cap */}
+      <div
+        style={{
+          height: CAP_H * 2,
+          borderRadius: '50%',
+          background: `radial-gradient(ellipse at 38% 36%, ${pal.hi}, ${pal.body} 55%, ${pal.lo})`,
+          boxShadow: `0 3px 10px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.18)`,
+          position: 'relative',
+          zIndex: 2,
+        }}
+      />
+      {/* Body */}
+      <div
+        style={{
+          height: BODY_H,
+          background: bodyGrad,
+          marginTop: -CAP_H,
+          marginBottom: -CAP_H,
+          position: 'relative',
+          zIndex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <span
+          style={{
+            color: 'rgba(255,255,255,0.95)',
+            fontSize: 10,
+            fontWeight: 700,
+            letterSpacing: '0.07em',
+            textTransform: 'uppercase',
+            textShadow: '0 1px 4px rgba(0,0,0,0.40)',
+            userSelect: 'none',
+          }}
+        >
+          {label}
+        </span>
+      </div>
+      {/* Bottom cap */}
+      <div
+        style={{
+          height: CAP_H * 2,
+          borderRadius: '50%',
+          background: `radial-gradient(ellipse at 40% 64%, ${pal.lo}, ${pal.body} 60%, ${pal.hi})`,
+          boxShadow: `inset 0 4px 10px rgba(0,0,0,0.28)`,
+          position: 'relative',
+          zIndex: 2,
+        }}
+      />
+    </div>
+  )
+}
+
+interface ParticleStreamProps {
+  spreadPct: number  // half-spread in % of container (= ~35% of funnel width)
+}
+
+function ParticleStream({ spreadPct }: ParticleStreamProps) {
+  return (
+    <>
+      {PARTICLES.map((p, idx) => {
+        const leftPct = 50 + p.rx * spreadPct * 2  // center ± spread
+        return (
+          <div
+            key={idx}
+            style={{
+              position: 'absolute',
+              left: `calc(${leftPct}% - ${p.sz / 2}px)`,
+              top: -p.sz / 2,
+              width: p.sz,
+              height: p.sz,
+              borderRadius: '50%',
+              background: `radial-gradient(circle at 35% 35%, rgba(230,100,80,0.9), rgba(200,67,42,0.6))`,
+              boxShadow: '0 0 5px rgba(200,67,42,0.45)',
+              animationName: p.big ? 'funnelParticle' : 'funnelParticleSmall',
+              animationDuration: `${p.dur}s`,
+              animationDelay: `${p.del}s`,
+              animationTimingFunction: 'ease-in',
+              animationIterationCount: 'infinite',
+              animationFillMode: 'both',
+            }}
+          />
+        )
+      })}
+    </>
+  )
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
+interface MetricFunnelProps {
+  totals: FunnelTotals
+  objective?: string | null
+  customMetrics?: string[]
+}
 
 export function MetricFunnel({ totals, objective, customMetrics }: MetricFunnelProps) {
-  const steps = customMetrics && customMetrics.length > 0
-    ? buildCustomSteps(totals, customMetrics)
-    : buildSteps(totals, objective)
-  const summary = customMetrics && customMetrics.length > 0 ? [] : summaryMetrics(totals, objective)
+  const steps =
+    customMetrics && customMetrics.length > 0
+      ? buildCustomSteps(totals, customMetrics)
+      : buildSteps(totals, objective)
+  const summary =
+    customMetrics && customMetrics.length > 0 ? [] : summaryMetrics(totals, objective)
   const maxVal = steps[0]?.value ?? 1
 
-  const title = objective === 'LEAD' ? 'Geração de Leads'
+  const title =
+    objective === 'LEAD' ? 'Geração de Leads'
     : objective === 'SALES' ? 'Vendas'
     : objective === 'BRANDING' ? 'Branding'
     : 'Performance'
 
   return (
     <div className="rounded-xl border border-[#E8E2D8] bg-white p-5">
-      <h3 className="text-sm font-semibold text-stone-700 mb-5">
-        Funil de {title}
-      </h3>
+      <h3 className="text-sm font-semibold text-stone-700 mb-5">Funil de {title}</h3>
 
-      <div>
-        {steps.map((step, i) => {
-          // Width ratios for top and bottom edges of this trapezoid
-          const currRatio = Math.max(MIN_RATIO, maxVal > 0 ? step.value / maxVal : MIN_RATIO)
-          const nextRatio = i < steps.length - 1
-            ? Math.max(MIN_RATIO, maxVal > 0 ? steps[i + 1].value / maxVal : MIN_RATIO)
-            : Math.max(0.06, currRatio * 0.55)  // last step tapers to a point
+      <div className="flex gap-4">
+        {/* ── Funnel column ── */}
+        <div className="flex-1 min-w-0">
+          {steps.map((step, i) => {
+            const wPct = Math.max(MIN_W, maxVal > 0 ? (step.value / maxVal) * 100 : MIN_W)
+            // Particle spread = ~35% of current cylinder width
+            const spreadPct = wPct * 0.35
 
-          // clip-path polygon coords as percentages of container width
-          const lTop = ((1 - currRatio) / 2) * 100
-          const rTop = 100 - lTop
-          const lBot = ((1 - nextRatio) / 2) * 100
-          const rBot = 100 - lBot
-
-          const bgColor = STEP_COLORS[Math.min(i, STEP_COLORS.length - 1)]
-
-          // Percentage of first step (for the "% do total" sub-label)
-          const pctOfFirst = maxVal > 0 ? step.value / maxVal : 0
-
-          return (
-            <div key={step.label}>
-              {/* Conversion rate connector between steps */}
-              {i > 0 && (
-                <div className="flex items-center justify-center" style={{ height: 36 }}>
-                  {(step.rate !== undefined || step.rateLabel) ? (
-                    <div className="flex flex-col items-center gap-0.5">
-                      <div className="w-px h-2.5 bg-stone-200" />
-                      <span className="text-[10px] font-semibold text-stone-500 bg-[#FAF8F5] border border-[#E8E2D8] rounded-full px-2.5 py-0.5 leading-none">
-                        {step.rate !== undefined
-                          ? `${formatPercent(step.rate)}${step.rateLabel ? ` ${step.rateLabel}` : ''}`
-                          : step.rateLabel}
-                      </span>
-                      <div className="w-px h-2.5 bg-stone-200" />
-                    </div>
-                  ) : (
-                    <div className="w-px h-full bg-stone-200" />
-                  )}
-                </div>
-              )}
-
-              {/* Step row */}
-              <div className="flex items-center gap-3">
-                {/* Step index dot */}
-                <div
-                  className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center"
-                  style={{ backgroundColor: 'rgba(200,67,42,0.10)' }}
-                >
-                  <span className="text-[9px] font-bold" style={{ color: '#C8432A' }}>{i + 1}</span>
-                </div>
-
-                {/* Trapezoid shape + label overlay */}
-                <div className="flex-1 relative" style={{ height: STEP_H }}>
-                  {/* Clipped trapezoid (visual shape) */}
-                  <div
-                    className="absolute inset-0"
-                    style={{
-                      clipPath: `polygon(${lTop}% 0%, ${rTop}% 0%, ${rBot}% 100%, ${lBot}% 100%)`,
-                      backgroundColor: bgColor,
-                    }}
-                  />
-                  {/* Label — sibling div, not clipped */}
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <span
-                      className="text-[11px] font-semibold tracking-wide select-none"
-                      style={{ color: i < 3 ? 'rgba(255,255,255,0.95)' : '#92847A' }}
-                    >
-                      {step.label}
-                    </span>
+            return (
+              <div key={step.label}>
+                {/* Connector gap: particles + rate badge */}
+                {i > 0 && (
+                  <div style={{ position: 'relative', height: GAP_H, overflow: 'hidden' }}>
+                    <ParticleStream spreadPct={spreadPct} />
+                    {/* Rate badge centered in gap */}
+                    {(step.rate !== undefined || step.rateLabel) && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          zIndex: 20,
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 600,
+                            color: '#78716C',
+                            background: 'rgba(255,255,255,0.92)',
+                            border: '1px solid #E8E2D8',
+                            borderRadius: 999,
+                            padding: '3px 10px',
+                            backdropFilter: 'blur(4px)',
+                            boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {step.rate !== undefined
+                            ? `${formatPercent(step.rate)}${step.rateLabel ? ` ${step.rateLabel}` : ''}`
+                            : step.rateLabel}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                </div>
+                )}
 
-                {/* Value column */}
-                <div className="flex-shrink-0 w-[72px] text-right">
-                  <p className="font-display text-lg font-bold text-stone-900 tabular-nums leading-tight">
-                    {formatNumber(step.value)}
+                {/* Cylinder */}
+                <Cylinder
+                  widthPct={wPct}
+                  pal={PALETTE[Math.min(i, PALETTE.length - 1)]}
+                  label={step.label}
+                />
+              </div>
+            )
+          })}
+        </div>
+
+        {/* ── Values column ── */}
+        <div className="flex-shrink-0 w-[72px] flex flex-col">
+          {steps.map((step, i) => (
+            <div key={step.label}>
+              {i > 0 && <div style={{ height: GAP_H }} />}
+              <div
+                style={{ height: CYL_H }}
+                className="flex flex-col justify-center items-end"
+              >
+                <p className="font-display text-xl font-bold text-stone-900 tabular-nums leading-tight">
+                  {formatNumber(step.value)}
+                </p>
+                {i > 0 && (
+                  <p className="text-[10px] text-stone-400 tabular-nums mt-0.5">
+                    {formatPercent(step.value / maxVal)}
                   </p>
-                  {i > 0 && (
-                    <p className="text-[10px] text-stone-400 tabular-nums mt-0.5">
-                      {formatPercent(pctOfFirst)}
-                    </p>
-                  )}
-                </div>
+                )}
               </div>
             </div>
-          )
-        })}
+          ))}
+        </div>
       </div>
 
-      {/* Summary KPIs */}
+      {/* ── Summary KPIs ── */}
       {summary.length > 0 && (
         <div className="mt-5 flex flex-wrap gap-x-6 gap-y-3 pt-4 border-t border-[#F5F0E8]">
           {summary.map((s) => (
             <div key={s.label}>
-              <p className="text-[10px] font-medium text-stone-400 uppercase tracking-widest">{s.label}</p>
-              <p className="font-display text-base font-bold text-stone-900 leading-tight">{s.value}</p>
+              <p className="text-[10px] font-medium text-stone-400 uppercase tracking-widest">
+                {s.label}
+              </p>
+              <p className="font-display text-base font-bold text-stone-900 leading-tight">
+                {s.value}
+              </p>
             </div>
           ))}
         </div>

@@ -1,4 +1,4 @@
-import { PlatformAdapter, NormalizedMetric, DateRange } from './types'
+import { PlatformAdapter, NormalizedMetric, DateRange } from './types.js'
 import { Decimal } from '@prisma/client/runtime/library'
 
 const META_GRAPH_URL = 'https://graph.facebook.com/v25.0'
@@ -102,7 +102,7 @@ export class MetaAdapter implements PlatformAdapter {
             platform: 'META_ADS',
             externalAccountId: accountId,
             externalCampaignId: level === 'campaign' ? row.campaign_id : null,
-            externalCampaignName: level === 'campaign' ? row.campaign_name : null,
+            campaignName: level === 'campaign' ? row.campaign_name : null,
             impressions: parseInt(row.impressions, 10),
             clicks: parseInt(row.clicks, 10),
             spend: new Decimal(row.spend),

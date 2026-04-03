@@ -50,6 +50,20 @@
   }
 }
 
+/* Funnel particle fall animation */
+@keyframes funnelParticle {
+  0%   { transform: translateY(0px)  scale(1);    opacity: 0;   }
+  6%   { opacity: 0.9; }
+  70%  { opacity: 0.6; }
+  100% { transform: translateY(56px) scale(0.6);  opacity: 0;   }
+}
+@keyframes funnelParticleSmall {
+  0%   { transform: translateY(0px)  scale(0.8);  opacity: 0;   }
+  6%   { opacity: 0.7; }
+  75%  { opacity: 0.4; }
+  100% { transform: translateY(56px) scale(0.4);  opacity: 0;   }
+}
+
 /* Custom warm scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
