@@ -58,9 +58,25 @@ function extractActionValue(
 ): number {
   for (const type of types) {
     const found = actions?.find((a) => a.action_type === type)
-    if (found) return parseFloat(found.value)
+    if (found && parseFloat(found.value) > 0) return parseFloat(found.value)
   }
   return 0
+}
+
+/**
+ * Soma os valores de vários action_types (ex: onsite_purchase + offsite_purchase).
+ * Diferente de extractActionValue, este método acumula todos os encontrados.
+ */
+function sumActionValues(
+  actions: Array<{ action_type: string; value: string }> | undefined,
+  ...types: string[]
+): number {
+  let total = 0
+  for (const type of types) {
+    const found = actions?.find((a) => a.action_type === type)
+    if (found) total += parseFloat(found.value)
+  }
+  return total
 }
 
 export class MetaAdapter implements PlatformAdapter {
@@ -99,13 +115,13 @@ export class MetaAdapter implements PlatformAdapter {
           // Campos individuais de conversão por objetivo
           // Meta API retorna eventos de pixel com prefixo offsite_conversion.fb_pixel_*
           // Tentamos o nome completo primeiro e o simplificado como fallback
-          const leads = extractActionValue(row.actions,
-            'offsite_conversion.fb_pixel_lead', 'lead', 'offsite_conversion.lead')
-          const purchases = extractActionValue(row.actions,
-            'offsite_conversion.fb_pixel_purchase', 'purchase', 'offsite_conversion.purchase', 'onsite_conversion.purchase')
-          const addToCart = extractActionValue(row.actions,
+          const leads = sumActionValues(row.actions,
+            'offsite_conversion.fb_pixel_lead', 'onsite_conversion.lead', 'lead')
+          const purchases = sumActionValues(row.actions,
+            'offsite_conversion.fb_pixel_purchase', 'onsite_conversion.purchase', 'purchase')
+          const addToCart = sumActionValues(row.actions,
             'offsite_conversion.fb_pixel_add_to_cart', 'add_to_cart')
-          const initiateCheckout = extractActionValue(row.actions,
+          const initiateCheckout = sumActionValues(row.actions,
             'offsite_conversion.fb_pixel_initiate_checkout', 'initiate_checkout')
           const viewContent = extractActionValue(row.actions,
             'offsite_conversion.fb_pixel_view_content', 'view_content')
@@ -126,13 +142,11 @@ export class MetaAdapter implements PlatformAdapter {
           // conversions = soma retrocompatível
           const conversions = purchases + leads + completeRegistration
 
-          // Receita: pixel purchase tem precedência sobre purchase genérico
-          const revenue = extractActionValue(row.action_values,
+          // Receita: SOMAMOS onsite e offsite para ter o total correto
+          const revenue = sumActionValues(row.action_values,
             'offsite_conversion.fb_pixel_purchase',
-            'purchase',
-            'offsite_conversion.purchase',
             'onsite_conversion.purchase',
-            'conversion'
+            'purchase'
           )
 
           // Landing page views: campo top-level ou fallback via actions
