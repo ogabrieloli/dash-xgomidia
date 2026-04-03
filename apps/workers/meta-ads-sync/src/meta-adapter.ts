@@ -52,6 +52,39 @@ interface MetaTokenDebugResponse {
   }
 }
 
+/**
+ * Soma apenas as ações "folhas" (disjuntas) para evitar duplicação.
+ * Geralmente soma offsite_conversion.* e onsite_conversion.* que contenham a palavra-chave.
+ * Isso evita somar o agregado 'purchase' com seus componentes.
+ */
+function sumGoalActions(
+  actions: Array<{ action_type: string; value: string }> | undefined,
+  keyword: string
+): number {
+  if (!actions) return 0
+  let total = 0
+  for (const action of actions) {
+    const type = action.action_type.toLowerCase()
+    const kw = keyword.toLowerCase()
+
+    // Filtramos para pegar apenas eventos específicos de conversão
+    const isSpecificConversion = type.startsWith('offsite_conversion.') || type.startsWith('onsite_conversion.')
+
+    if (isSpecificConversion && type.includes(kw)) {
+      total += parseFloat(action.value)
+    }
+  }
+
+  // Backup: se não encontrou nada específico mas existe a chave genérica, usa ela
+  if (total === 0) {
+    const kw = keyword.toLowerCase()
+    const generic = actions.find(a => a.action_type.toLowerCase() === kw)
+    if (generic) total = parseFloat(generic.value)
+  }
+
+  return total
+}
+
 function extractActionValue(
   actions: Array<{ action_type: string; value: string }> | undefined,
   ...types: string[]
@@ -64,18 +97,43 @@ function extractActionValue(
 }
 
 /**
- * Soma os valores de vários action_types (ex: onsite_purchase + offsite_purchase).
- * Diferente de extractActionValue, este método acumula todos os encontrados.
+ * Soma os valores de vários action_types de forma flexível.
+ * Se 'fuzzy' for true, também inclui qualquer tipo que contenha uma das palavras-chave
+ * e que ainda não tenha sido contabilizado.
  */
 function sumActionValues(
   actions: Array<{ action_type: string; value: string }> | undefined,
-  ...types: string[]
+  types: string[],
+  fuzzyKeywords: string[] = []
 ): number {
   let total = 0
+  const matchedTypes = new Set<string>()
+
+  // 1. Soma tipos exatos
   for (const type of types) {
     const found = actions?.find((a) => a.action_type === type)
-    if (found) total += parseFloat(found.value)
+    if (found) {
+      total += parseFloat(found.value)
+      matchedTypes.add(type)
+    }
   }
+
+  // 2. Busca fuzzy (para conversões customizadas que não conhecemos o nome exato)
+  if (fuzzyKeywords.length > 0 && actions) {
+    for (const action of actions) {
+      if (matchedTypes.has(action.action_type)) continue
+
+      const isFuzzyMatch = fuzzyKeywords.some(kw =>
+        action.action_type.toLowerCase().includes(kw.toLowerCase())
+      )
+
+      if (isFuzzyMatch) {
+        total += parseFloat(action.value)
+        matchedTypes.add(action.action_type)
+      }
+    }
+  }
+
   return total
 }
 
@@ -113,17 +171,10 @@ export class MetaAdapter implements PlatformAdapter {
 
         for (const row of body.data) {
           // Campos individuais de conversão por objetivo
-          // Usamos uma lógica de "união prioritária" para evitar duplicação
-          // Somamos fontes disjuntas (Site + Onsite) mas evitamos somar o agregado 'purchase' com o 'pixel_purchase'
-          const sitePurchases = extractActionValue(row.actions,
-            'offsite_conversion.fb_pixel_purchase', 'offsite_conversion.purchase', 'purchase')
-          const onsitePurchases = extractActionValue(row.actions, 'onsite_conversion.purchase')
-          const purchases = sitePurchases + onsitePurchases
-
-          const siteLeads = extractActionValue(row.actions,
-            'offsite_conversion.fb_pixel_lead', 'offsite_conversion.lead', 'lead')
-          const onsiteLeads = extractActionValue(row.actions, 'onsite_conversion.lead')
-          const leads = siteLeads + onsiteLeads
+          // Usamos a lógica de soma de objetivos específicos (Site + App + Custom)
+          // Isso evita duplicar com a chave 'purchase' agregada
+          const purchases = sumGoalActions(row.actions, 'purchase')
+          const leads = sumGoalActions(row.actions, 'lead')
 
           const addToCart = extractActionValue(row.actions,
             'offsite_conversion.fb_pixel_add_to_cart', 'add_to_cart')
@@ -145,16 +196,13 @@ export class MetaAdapter implements PlatformAdapter {
           // Hierarquia: dado real > ig_profile_view > estimativa conservadora (0.3 de page_engagement)
           const profileVisits = directProfileVisit > 0 ? directProfileVisit
             : igProfileView > 0 ? igProfileView
-            : Math.round(pageEngagement * 0.3)
+              : Math.round(pageEngagement * 0.3)
 
           // conversions = soma retrocompatível
           const conversions = purchases + leads + completeRegistration
 
-          // Receita: SOMAMOS onsite e offsite para ter o total correto, mas evitamos duplicar o agregado
-          const siteRevenue = extractActionValue(row.action_values,
-            'offsite_conversion.fb_pixel_purchase', 'offsite_conversion.purchase', 'purchase')
-          const onsiteRevenue = extractActionValue(row.action_values, 'onsite_conversion.purchase')
-          const revenue = siteRevenue + onsiteRevenue
+          // Receita: SOMAMOS apenas as fontes específicas de valor
+          const revenue = sumGoalActions(row.action_values, 'purchase')
 
           // Landing page views: campo top-level ou fallback via actions
           const landingPageViews =
@@ -285,6 +333,8 @@ export class MetaAdapter implements PlatformAdapter {
       time_range: JSON.stringify({ since: dateRange.from, until: dateRange.to }),
       time_increment: '1', // dia a dia
       level,
+      action_attribution_windows: '["7d_click","1d_view"]', // Bate com o padrão do Meta Ads
+      action_report_time: 'mixed', // Reporta a conversão no dia do clique
       access_token: accessToken,
       limit: '500',
     })
