@@ -57,7 +57,7 @@ export class SocialAttributionService {
                     adAccountId_date_externalCampaignId: {
                         adAccountId: metric.adAccountId,
                         date: new Date(dateStr),
-                        externalCampaignId: metric.externalCampaignId
+                        externalCampaignId: metric.externalCampaignId!
                     }
                 },
                 create: {
